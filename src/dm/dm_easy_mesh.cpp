@@ -124,7 +124,8 @@ int dm_easy_mesh_t::commit_config(dm_easy_mesh_t& dm, em_commit_target_t target)
 
 	if ( target == em_commit_target_sta_hash_map ) {
                 dm_sta_t *sta;
-                hash_map_t **m_sta_assoc_map = (hash_map_t **)dm.get_assoc_sta_map();
+                //hash_map_t **m_sta_assoc_map = (hash_map_t **)dm.get_assoc_sta_map();
+                hash_map_t **m_sta_assoc_map = (hash_map_t **)dm.get_sta_map();
                 hash_map_t **em_m_sta_map = get_sta_map();
 				
                 if ((m_sta_assoc_map != NULL) && (*m_sta_assoc_map != NULL)) {
@@ -329,6 +330,11 @@ int dm_easy_mesh_t::analyze_client_cap_query(em_bus_event_t *evt, em_cmd_t *pcmd
     mac_addr_str_t mac_str;dm_easy_mesh_t::macbytes_to_string(dm.m_radio[0].get_radio_info()->id.mac,mac_str);
     pcmd[0] = new em_cmd_client_cap_report_t(evt->params,dm);
     pcmd[0]->override_op(0, &desc);
+    return 1;
+}
+
+int dm_easy_mesh_t::analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em_cmd_t *pcmd[])
+{
     return 1;
 }
 
@@ -1726,6 +1732,53 @@ void dm_easy_mesh_t::create_ap_cap_query_json_cmd(char* src_mac_addr, char* agen
     cJSON_Delete(root);
 }
 
+void dm_easy_mesh_t::create_assoc_sta_link_metrics_json_cmd(char* sta_mac_str, char* assoc_sta_link_metrics_json)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *sta_list = cJSON_CreateObject();
+    char *json_string;
+
+    cJSON_AddItemToObject(root, "wfa-dataelements:StaList", sta_list);
+
+    cJSON_AddStringToObject(sta_list, "ID", "testID");
+    cJSON_AddNumberToObject(sta_list, "NumberOfDevices", 2);
+    cJSON_AddStringToObject(sta_list, "TimeStamp", "2019-02-11T06:23:43.743847-08:00");
+    cJSON_AddStringToObject(sta_list, "ControllerID", "02:01:02:01:00:01");
+
+
+    cJSON *device_list = cJSON_CreateArray();
+    cJSON_AddItemToObject(sta_list, "DeviceList", device_list);
+
+
+    cJSON *device = cJSON_CreateObject();
+    cJSON_AddItemToArray(device_list, device);
+    cJSON_AddStringToObject(device, "ID", "d8:3a:dd:0e:00:cb");
+
+    cJSON *radio_list = cJSON_CreateArray();
+    cJSON_AddItemToObject(device, "RadioList", radio_list);
+
+    cJSON *radio = cJSON_CreateObject();
+    cJSON_AddItemToArray(radio_list, radio);
+
+    cJSON *bss_list = cJSON_CreateArray();
+    cJSON_AddItemToObject(radio, "BSSList", bss_list);
+
+    cJSON *bss = cJSON_CreateObject();
+    cJSON_AddItemToArray(bss_list, bss);
+    cJSON_AddStringToObject(bss, "BSSID", "d8:3a:dd:0e:00:cc");
+
+    cJSON *sta_list_arr = cJSON_CreateArray();
+    cJSON_AddItemToObject(bss, "STAList", sta_list_arr);
+
+    cJSON *sta = cJSON_CreateObject();
+    cJSON_AddItemToArray(sta_list_arr, sta);
+    cJSON_AddStringToObject(sta, "MACAddress", sta_mac_str);
+    json_string = cJSON_Print(root);
+    strcpy(assoc_sta_link_metrics_json, json_string);
+    printf("%s\n", json_string);
+    cJSON_Delete(root);
+}
+
 void dm_easy_mesh_t::create_client_cap_query_json_cmd(char* src_mac_addr, char* agent_al_mac, char* ap_query_json, short msg_id, char *mac)
 {
     cJSON *root, *query_info, *device_list;
@@ -1775,8 +1828,8 @@ em_sta_info_t *dm_easy_mesh_t::get_first_sta_info()
 {
 	dm_sta_t *sta = NULL;
 
-	//sta = (dm_sta_t *)hash_map_get_first(m_sta_map);
-	sta = (dm_sta_t *)hash_map_get_first(m_sta_assoc_map);
+	sta = (dm_sta_t *)hash_map_get_first(m_sta_map);
+	//sta = (dm_sta_t *)hash_map_get_first(m_sta_assoc_map);
     if (sta != NULL) {
 		return &sta->m_sta_info;
 	}
@@ -1789,8 +1842,8 @@ em_sta_info_t *dm_easy_mesh_t::get_next_sta_info(em_sta_info_t *info)
 	dm_sta_t *sta = NULL;
 	bool return_next = false;
 
-	//sta = (dm_sta_t *)hash_map_get_first(m_sta_map);
-    sta = (dm_sta_t *)hash_map_get_first(m_sta_assoc_map);
+	sta = (dm_sta_t *)hash_map_get_first(m_sta_map);
+    //sta = (dm_sta_t *)hash_map_get_first(m_sta_assoc_map);
 	while (sta != NULL) {
 		if (return_next == true) {
 			break;
@@ -1798,8 +1851,8 @@ em_sta_info_t *dm_easy_mesh_t::get_next_sta_info(em_sta_info_t *info)
 		if (info == &sta->m_sta_info) {
 			return_next = true;
 		}
-		//sta = (dm_sta_t *)hash_map_get_next(m_sta_map, sta);
-	    sta = (dm_sta_t *)hash_map_get_next(m_sta_assoc_map, sta);
+		sta = (dm_sta_t *)hash_map_get_next(m_sta_map, sta);
+	    //sta = (dm_sta_t *)hash_map_get_next(m_sta_assoc_map, sta);
     }
 
 	if (return_next == true) {
@@ -1815,8 +1868,8 @@ em_sta_info_t *dm_easy_mesh_t::get_sta_info(unsigned char *mac)
 	dm_sta_t *sta = NULL;
 
 	dm_easy_mesh_t::macbytes_to_string(mac, mac_str);
-	//sta = (dm_sta_t *)hash_map_get(m_sta_map, mac_str);
-    sta = (dm_sta_t *)hash_map_get(m_sta_assoc_map, mac_str);
+	sta = (dm_sta_t *)hash_map_get(m_sta_map, mac_str);
+    //sta = (dm_sta_t *)hash_map_get(m_sta_assoc_map, mac_str);
 	if (sta != NULL) {
 		return &sta->m_sta_info;
 	}	
@@ -1837,7 +1890,6 @@ em_sta_info_t *dm_easy_mesh_t::get_sta_info(unsigned char *mac)
 
 void dm_easy_mesh_t::put_sta_info(em_sta_info_t *sta_info)
 {
-    printf("---put_sta_info dm map addr: %p\n", m_sta_assoc_map);
     mac_addr_str_t s_mac_str, d_mac_str;
     em_sta_info_t *em_sta;
     em_sta = get_sta_info(sta_info->id);
@@ -1854,9 +1906,10 @@ void dm_easy_mesh_t::put_sta_info(em_sta_info_t *sta_info)
     {
         printf("sta info in put map null\n");
     }
+    dm_easy_mesh_t::macbytes_to_string(sta_info->id, s_mac_str);
 //  hash_map_put(m_sta_map, strdup(s_mac_str), new dm_sta_t(sta_info));
-    int ret = hash_map_put(m_sta_assoc_map, strdup(s_mac_str), new dm_sta_t(sta_info));
-    printf("---put_sta_info ret %d\n", ret);
+    hash_map_put(m_sta_assoc_map, strdup(s_mac_str), new dm_sta_t(sta_info));
+    hash_map_put(m_sta_map, strdup(s_mac_str), new dm_sta_t(sta_info));
 }
 
 dm_easy_mesh_t::dm_easy_mesh_t(const dm_network_t& net)

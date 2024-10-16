@@ -96,6 +96,9 @@ void em_t::orch_execute(em_cmd_t *pcmd)
         case em_cmd_type_dev_test:
 			m_state = em_state_ctrl_channel_query_pending;
 			break;
+        case em_cmd_type_assoc_sta_link_metrics:
+            m_state = em_state_agent_assoc_sta_link_metrics;
+            break;
     }
 }
 
@@ -103,7 +106,7 @@ void em_t::set_orch_state(em_orch_state_t state)
 {
     if ((state == em_orch_state_fini) && (m_service_type == em_service_type_agent)) {
         // commit the parameters of command into data model
-        m_data_model->commit_config(m_cmd->m_data_model, em_commit_target_em);
+        //m_data_model->commit_config(m_cmd->m_data_model, em_commit_target_em);
     } else if (state == em_orch_state_cancel) {
         state = em_orch_state_fini;
     }
@@ -139,6 +142,10 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_ap_cap_query:
         case em_msg_type_client_cap_query:
             em_capability_t::process_msg(data, len);
+            break;
+
+        case em_msg_type_assoc_sta_link_metrics_query:
+            em_metrics_t::process_msg(data, len);
             break;
 
         default:
@@ -180,6 +187,12 @@ void em_t::handle_agent_state()
                 em_capability_t::process_state();
             }
             break;
+
+        case em_cmd_type_assoc_sta_link_metrics:
+            em_metrics_t::process_state();
+
+            break;
+
         default:
             break;
     }

@@ -52,11 +52,14 @@ void em_agent_t::handle_sta_list(em_bus_event_t *evt)
     } else if ((num = m_data_model.analyze_sta_list(evt, pcmd)) == 0) {
         m_agent_cmd->send_result(em_cmd_out_status_no_change);
     } else if (m_orch->submit_commands(pcmd, num) > 0) {
-        m_agent_cmd->send_result(em_cmd_out_status_success);
+        //m_agent_cmd->send_result(em_cmd_out_status_success);
     } else {
-        m_agent_cmd->send_result(em_cmd_out_status_not_ready);
+        //m_agent_cmd->send_result(em_cmd_out_status_not_ready);
     }
 
+    //Empty the m_assoc_map
+    hash_map_t **ptr_sta_map = m_data_model.get_assoc_sta_map();
+    hash_map_cleanup(*ptr_sta_map);
 }
 
 void em_agent_t::handle_ap_cap_query(em_bus_event_t *evt)
@@ -163,6 +166,22 @@ void em_agent_t::handle_onewifi_private_subdoc(em_bus_event_t *evt)
     }
 }
 
+void em_agent_t::handle_assoc_sta_link_metrics(em_bus_event_t *evt)
+{
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    unsigned int num;
+
+    if (m_orch->is_cmd_type_in_progress(evt->type) == true) {
+        m_agent_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
+    } else if ((num = m_data_model.analyze_assoc_sta_link_metrics(evt, pcmd)) == 0) {
+        m_agent_cmd->send_result(em_cmd_out_status_no_change);
+    } else if (m_orch->submit_commands(pcmd, num) > 0) {
+        /*m_agent_cmd->send_result(em_cmd_out_status_success);
+    } else {
+        m_agent_cmd->send_result(em_cmd_out_status_not_ready);*/
+    }
+}
+
 void em_agent_t::handle_vendor_public_action_frame(struct ieee80211_mgmt *frame)
 {
 
@@ -260,6 +279,10 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
 			handle_onewifi_private_subdoc(evt);
 			break;
 
+        case em_bus_event_type_assoc_sta_link_metrics:
+            handle_assoc_sta_link_metrics(evt);
+            break;
+
         default:
             break;
     }    
@@ -286,6 +309,50 @@ void em_agent_t::handle_timeout()
 {
     m_orch->handle_timeout();
 }
+
+//TODO: Remove below test code later
+char *assoc_clients = "{\n"
+"  \"Version\": \"1.0\",\n"
+"  \"SubDocName\": \"associated clients\",\n"
+"  \"WiFiAssociatedClients\": [\n"
+"    {\n"
+"      \"VapName\": \"private_ssid_2g\",\n"
+"      \"associatedClients\": [\n"
+"        {\n"
+"          \"MACAddress\": \"16:24:75:c1:79:0f\",\n"
+"          \"WpaKeyMgmt\": \"\",\n"
+"          \"PairwiseCipher\": \"\",\n"
+"          \"AuthenticationState\": true,\n"
+"          \"LastDataDownlinkRate\": 780,\n"
+"          \"LastDataUplinkRate\": 6,\n"
+"          \"SignalStrength\": -46,\n"
+"          \"Retransmissions\": 13,\n"
+"          \"Active\": true,\n"
+"          \"OperatingStandard\": \"ac\",\n"
+"          \"OperatingChannelBandwidth\": \"80\",\n"
+"          \"SNR\": 45,\n"
+"          \"InterferenceSources\": \"\",\n"
+"          \"DataFramesSentAck\": 411,\n"
+"          \"DataFramesSentNoAck\": 0,\n"
+"          \"BytesSent\": 240132,\n"
+"          \"BytesReceived\": 121062,\n"
+"          \"RSSI\": -46,\n"
+"          \"MinRSSI\": 0,\n"
+"          \"MaxRSSI\": 0,\n"
+"          \"Disassociations\": 0,\n"
+"          \"AuthenticationFailures\": 0,\n"
+"          \"PacketsSent\": 411,\n"
+"          \"PacketsReceived\": 818,\n"
+"          \"ErrorsSent\": 0,\n"
+"          \"RetransCount\": 13,\n"
+"          \"FailedRetransCount\": 0,\n"
+"          \"RetryCount\": 5,\n"
+"          \"MultipleRetryCount\": 0\n"
+"        }\n"
+"      ]\n"
+"    }\n"
+"  ]\n"
+"}";
 
 void em_agent_t::input_listener()
 {
@@ -328,6 +395,23 @@ void em_agent_t::input_listener()
         printf("%s:%d bus get failed\n", __func__, __LINE__);
         return;
     }
+
+    if (desc->bus_event_subs_fn(&m_bus_hdl, WIFI_COLLECT_STATS_ASSOC_DEVICE_STATS, (void *)&em_agent_t::assoc_stats_cb, NULL, 0) != 0) {
+        printf("%s:%d bus get failed\n", __func__, __LINE__);
+        return;
+    }
+
+    //TODO: Remove below test code later
+    pthread_t t_assoc_clients;
+
+    // Create a new thread that will run the delayed_function
+    if (pthread_create(&t_assoc_clients, NULL,em_agent_t::assoc_clients_f, NULL) != 0) {
+        fprintf(stderr, "Error creating thread\n");
+        return ;
+    }
+
+    pthread_detach(t_assoc_clients);
+
     io(NULL);
 }
 
@@ -344,6 +428,111 @@ int em_agent_t::sta_cb(char *event_name, raw_data_t *data)
     g_agent.agent_input(&evt);
 
 }
+
+//TODO: Remove below test code later
+void* em_agent_t::assoc_clients_f(void* arg) {
+    sleep(10);
+    printf("\n[DEBUG]: Function called after 10 seconds- aSSOC CLIENTS\n");
+
+    em_event_t evt;
+    em_bus_event_t *bevt;
+
+    bevt = &evt.u.bevt;
+    bevt->type = em_bus_event_type_sta_list;
+    memcpy(bevt->u.raw_buff, assoc_clients, strlen(assoc_clients)+1);
+
+    g_agent.agent_input(&evt);
+
+    //START assoc dev stats
+    pthread_t t_assoc_stats;
+
+    // Create a new thread that will run the delayed_function
+    if (pthread_create(&t_assoc_stats, NULL, em_agent_t::assoc_stats, NULL) != 0) {
+        fprintf(stderr, "Error creating thread\n");
+    }
+
+    pthread_detach(t_assoc_stats);
+}
+
+//TODO: Remove below test code later
+void* em_agent_t::assoc_stats(void* arg) {
+    sleep(15);
+    printf("\n[DEBUG]: Function called after 15 seconds\n");
+    const char* jsonString = "{\n"
+"    \"Version\": \"1.0\",\n"
+"    \"SubDocName\": \"Associated_Device_Stats\",\n"
+"    \"VapIndex\": 1,\n"
+"    \"AssociatedDeviceStats\": [\n"
+"        {\n"
+"            \"cli_MACAddress\": \"16:24:75:c1:79:0f\",\n"
+"            \"cli_IPAddress\": \"192.168.1.20\",\n"
+"            \"cli_AuthenticationState\": true,\n"
+"            \"cli_LastDataDownlinkRate\": 72,\n"
+"            \"cli_LastDataUplinkRate\": 72,\n"
+"            \"cli_SignalStrength\": -13,\n"
+"            \"cli_Retransmissions\": 0,\n"
+"            \"cli_Active\": true,\n"
+"            \"cli_OperatingStandard\": \"n\",\n"
+"            \"cli_OperatingChannelBandwidth\": \"20\",\n"
+"            \"cli_SNR\": 79,\n"
+"            \"cli_InterferenceSources\": \"xyz\",\n"
+"            \"cli_DataFramesSentAck\": 24,\n"
+"            \"cli_DataFramesSentNoAck\": 0,\n"
+"            \"cli_BytesSent\": 32902,\n"
+"            \"cli_BytesReceived\": 33620,\n"
+"            \"cli_RSSI\": -13,\n"
+"            \"cli_MinRSSI\": 0,\n"
+"            \"cli_MaxRSSI\": 0,\n"
+"            \"cli_Disassociations\": 0,\n"
+"            \"cli_AuthenticationFailures\": 0,\n"
+"            \"cli_Associations\": 1,\n"
+"            \"cli_PacketsSent\": 24,\n"
+"            \"cli_PacketsReceived\": 215,\n"
+"            \"cli_ErrorsSent\": 0,\n"
+"            \"cli_RetransCount\": 0,\n"
+"            \"cli_FailedRetransCount\": 0,\n"
+"            \"cli_RetryCount\": 0,\n"
+"            \"cli_MultipleRetryCount\": 0,\n"
+"            \"cli_MaxDownlinkRate\": 72,\n"
+"            \"cli_MaxUplinkRate\": 72,\n"
+"            \"cli_activeNumSpatialStreams\": 1,\n"
+"            \"cli_TxFrames\": 254,\n"
+"            \"cli_RxRetries\": 1,\n"
+"            \"cli_RxErrors\": 0\n"
+"        }\n"
+"    ]\n"
+"}";
+
+    cJSON *json_test = cJSON_Parse(jsonString);
+    char *formattedJson = cJSON_Print(json_test);
+
+    printf("\n%s:%d ASSOC STATS data:\r\n%s\r\n", __func__, __LINE__, (char *)jsonString);
+
+    em_event_t evt;
+    em_bus_event_t *bevt;
+
+    bevt = &evt.u.bevt;
+    bevt->type = em_bus_event_type_assoc_sta_link_metrics;
+    memcpy(bevt->u.raw_buff, jsonString, strlen(jsonString)+1);
+
+    g_agent.agent_input(&evt);
+}
+
+int em_agent_t::assoc_stats_cb(char *event_name, raw_data_t *data)
+{
+    printf("%s:%d recv data:\r\n%s\r\n", __func__, __LINE__, (char *)data->raw_data.bytes);
+    em_event_t evt;
+    em_bus_event_t *bevt;
+
+    bevt = &evt.u.bevt;
+    bevt->type = em_bus_event_type_sta_list;
+    memcpy(bevt->u.raw_buff, data->raw_data.bytes, data->raw_data_len);
+
+    g_agent.agent_input(&evt);
+
+    return 1;
+}
+
 
 int em_agent_t::data_model_init(const char *data_model_path)
 {

@@ -67,6 +67,7 @@ public:
     void handle_autoconfig_renew(em_bus_event_t *evt);
     void handle_client_cap_query(em_bus_event_t *evt);
     void handle_onewifi_private_subdoc(em_bus_event_t *evt);
+    void handle_assoc_sta_link_metrics(em_bus_event_t *evt);
 
     em_cmd_t& get_command(char *in);
     
@@ -84,6 +85,7 @@ public:
     static bus_error_t bus_listener(bus_handle_t *handle, bus_event_sub_action_t action, char const* eventName, bus_filter_t filter, int32_t interval, bool* autoPublish);    
     //void io(char *buff);
     static int sta_cb(char *event_name, raw_data_t *data);
+    static int assoc_stats_cb(char *event_name, raw_data_t *data);
     void *get_assoc(void*);
     void io(void *data, bool input = true);
     bool agent_input(void *data);
@@ -92,6 +94,10 @@ public:
     em_agent_t();
     ~em_agent_t();
 
+
+    //TODO: Remove below test code later
+    static void* assoc_clients_f(void* arg);
+    static void* assoc_stats(void* arg);
 };
 
 #endif

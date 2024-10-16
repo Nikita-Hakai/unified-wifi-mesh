@@ -31,8 +31,8 @@
 #define EM_MAC_STR_LEN  17
 #define EM_MAX_COLS     32
 
-#define EM_PROTO_TOUT   1
-#define EM_MGR_TOUT     1
+#define EM_PROTO_TOUT   2
+#define EM_MGR_TOUT     2
 #define EM_METRICS_REQ_MULT 5
 #define EM_2_TOUT_MULT 	2
 #define EM_5_TOUT_MULT 	5
@@ -744,7 +744,8 @@ typedef struct {
 typedef struct {
     mac_address_t sta_mac_addr;
     unsigned char num_bssids;
-    unsigned char bssid[6];
+    //unsigned char bssid[6];
+    mac_address_t bssid;
     unsigned int  time_delta_ms;
     unsigned int  est_mac_data_rate_dl;
     unsigned int  est_mac_data_rate_ul;
@@ -754,7 +755,8 @@ typedef struct {
 typedef struct {
     mac_address_t sta_mac_addr;
     unsigned char num_bssids;
-    unsigned char bssid[6];
+    //unsigned char bssid[6];
+    mac_address_t bssid;
     unsigned int  last_data_dl_rate;
     unsigned int  last_data_ul_rate;
     unsigned int  util_receive;
@@ -1583,6 +1585,7 @@ typedef enum {
     em_state_agent_ap_cap_report,
     em_state_agent_client_cap_report,
     em_state_agent_config_complete, // idle state after configured, should return to this state
+    em_state_agent_assoc_sta_link_metrics,
 
     em_state_ctrl_none = 0x100,
     em_state_ctrl_wsc_m1_pending,
@@ -1623,6 +1626,7 @@ typedef enum {
     em_cmd_type_topo_sync,
     em_cmd_type_em_config,
     em_cmd_type_onewifi_private_subdoc,
+    em_cmd_type_assoc_sta_link_metrics,
     em_cmd_type_max,
 } em_cmd_type_t;
 
@@ -1993,6 +1997,7 @@ typedef enum {
     em_bus_event_type_sta_list,
     em_bus_event_type_ap_cap_query,
     em_bus_event_type_client_cap_query,
+    em_bus_event_type_assoc_sta_link_metrics,
     em_bus_event_type_listener_stop,
     em_bus_event_type_dm_commit,
     em_bus_event_type_m2_tx,
@@ -2062,6 +2067,7 @@ typedef enum {
     dm_orch_type_ctrl_notify,
     dm_orch_type_ap_cap_report,
     dm_orch_type_client_cap_report,
+    dm_orch_type_assoc_sta_link_metrics_report,
     dm_orch_type_1905_security_update,
     dm_orch_type_topology_response,
     dm_orch_type_net_ssid_update,

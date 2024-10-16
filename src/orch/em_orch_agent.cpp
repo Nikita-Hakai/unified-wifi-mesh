@@ -132,54 +132,57 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
         case dm_orch_type_em_update:
             break;	
         case dm_orch_type_sta_insert:
-        case dm_orch_type_sta_update: {
-                                          char radio_mac[64] = {0};
-                                          dm_sta_t *sta;
-                                          dm_easy_mesh_t dm;
-                                          hash_map_t **m_sta_assoc_map = pcmd->get_data_model()->get_assoc_sta_map();
-                                          hash_map_t **temp = dm.get_assoc_sta_map();
-                                          if ((m_sta_assoc_map != NULL) && (*m_sta_assoc_map != NULL)) {
-                                              sta = (dm_sta_t *)hash_map_get_first(*m_sta_assoc_map);
-                                              while (sta != NULL) {
-                                                  sscanf(sta->get_sta_info()->m_sta_key,"%[^-]-%*s",radio_mac);
-                                                  em = (em_t *)hash_map_get(m_mgr->m_em_map,radio_mac);
-                                                  if (em != NULL) {
-                                                      dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
-                                                      // update the em
-                                                      *temp = hash_map_create();
-                                                      hash_map_put(*temp,strdup(sta->get_sta_info()->m_sta_key),sta);
-                                                      printf("%s:%d: Add key%s \nfrom node %s  found\n", __func__,\
-                                                              __LINE__,sta->get_sta_info()->m_sta_key,mac_str);
-                                                      em->get_data_model()->commit_config(dm, em_commit_target_sta_hash_map);
-                                                      memset(&dm,0,sizeof(dm));
-                                                  }
-                                                  sta = (dm_sta_t *)hash_map_get_next(*m_sta_assoc_map, sta);
-                                              }
-                                          }
-                                          hash_map_t **m_sta_dassoc_map = pcmd->get_data_model()->get_dassoc_sta_map();
-                                          hash_map_t **dtemp = dm.get_dassoc_sta_map();
-                                          if ((m_sta_dassoc_map != NULL) && (*m_sta_dassoc_map != NULL)) {
-                                              sta = (dm_sta_t *)hash_map_get_first(*m_sta_dassoc_map);
-                                              while (sta != NULL) {
-                                                  sscanf(sta->get_sta_info()->m_sta_key,"%[^-]-%*s",radio_mac);
-                                                  em = (em_t *)hash_map_get(m_mgr->m_em_map,radio_mac);
-                                                  if (em != NULL) {
-                                                      dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
-                                                      // update the em
-                                                      *dtemp = hash_map_create();
-                                                      hash_map_put(*dtemp,strdup(sta->get_sta_info()->m_sta_key),sta);
-                                                      printf("%s:%d: Remove key%s \nfrom node %s  found\n", __func__,\
-                                                              __LINE__,sta->get_sta_info()->m_sta_key,mac_str);
-                                                      em->get_data_model()->commit_config(dm, em_commit_target_sta_hash_map);
-                                                      memset(&dm,0,sizeof(dm));
-                                                  }
-                                                  sta = (dm_sta_t *)hash_map_get_next(*m_sta_dassoc_map, sta);
-                                              }
-                                          }
-                                          break;
-                                      }
+        case dm_orch_type_sta_update:
         case dm_orch_type_ap_cap_report:
         case dm_orch_type_client_cap_report:
+            break;
+        case dm_orch_type_assoc_sta_link_metrics_report:
+            {
+				char radio_mac[64] = {0};
+				dm_sta_t *sta;
+				dm_easy_mesh_t dm;
+				hash_map_t **m_sta_map = pcmd->get_data_model()->get_sta_map();
+				hash_map_t **temp = dm.get_sta_map();
+				if ((m_sta_map != NULL) && (*m_sta_map != NULL)) {
+				    sta = (dm_sta_t *)hash_map_get_first(*m_sta_map);
+				    while (sta != NULL) {
+					    sscanf(sta->get_sta_info()->m_sta_key,"%[^-]-%*s",radio_mac);
+					    em = (em_t *)hash_map_get(m_mgr->m_em_map,radio_mac);
+					    if (em != NULL) {
+						    dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
+						    // update the em
+						    *temp = hash_map_create();
+						    hash_map_put(*temp,strdup(sta->get_sta_info()->m_sta_key),sta);
+						    printf("%s:%d: Add key%s \nfrom node %s  found\n", __func__,\
+					                    __LINE__,sta->get_sta_info()->m_sta_key,mac_str);
+						    em->get_data_model()->commit_config(dm, em_commit_target_sta_hash_map);
+						    memset(&dm,0,sizeof(dm));
+					    }
+					    sta = (dm_sta_t *)hash_map_get_next(*m_sta_map, sta);
+				    }
+                }
+
+                /*hash_map_t **m_sta_dassoc_map = pcmd->get_data_model()->get_dassoc_sta_map();
+                hash_map_t **dtemp = dm.get_dassoc_sta_map();
+                if ((m_sta_dassoc_map != NULL) && (*m_sta_dassoc_map != NULL)) {
+                    sta = (dm_sta_t *)hash_map_get_first(*m_sta_dassoc_map);
+                    while (sta != NULL) {
+                        sscanf(sta->get_sta_info()->m_sta_key,"%[^-]-%*s",radio_mac);
+                        em = (em_t *)hash_map_get(m_mgr->m_em_map,radio_mac);
+                        if (em != NULL) {
+                            dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
+                            // update the em
+                            *dtemp = hash_map_create();
+                            hash_map_put(*dtemp,strdup(sta->get_sta_info()->m_sta_key),sta);
+                            printf("%s:%d: Remove key%s \nfrom node %s  found\n", __func__,\
+                                      __LINE__,sta->get_sta_info()->m_sta_key,mac_str);
+                            em->get_data_model()->commit_config(dm, em_commit_target_sta_hash_map);
+                            memset(&dm,0,sizeof(dm));
+                        }
+                        sta = (dm_sta_t *)hash_map_get_next(*m_sta_dassoc_map, sta);
+                    }
+                }*/
+            }
             break;
         default:
             break;
@@ -201,6 +204,9 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
     dm_sta_t *sta;
     dm_easy_mesh_t dm;
     hash_map_t **m_sta_assoc_map;
+    dm_sta_t *msta = NULL, *active_sta = NULL;
+    hash_map_t **assoc_clt = NULL;
+    hash_map_t **em_m_sta_map = NULL;
 
     ctx = pcmd->m_data_model.get_cmd_ctx();
     em = (em_t *)hash_map_get_first(m_mgr->m_em_map);	
@@ -229,29 +235,31 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
                 }
                 break;
             case em_cmd_type_sta_list:
-                /*if (em->is_al_interface_em()) {
+#if 0
+                if (em->is_al_interface_em()) {
                     dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), dst_mac_str);
                     printf("%s:%d Sta List build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
                     queue_push(pcmd->m_em_candidates, em);
                     count++;
-                }*/
+                }
+#else
                 m_sta_assoc_map = pcmd->get_data_model()->get_assoc_sta_map();
-                    if ((m_sta_assoc_map != NULL) && (*m_sta_assoc_map != NULL)) {
-                        sta = (dm_sta_t *)hash_map_get_first(*m_sta_assoc_map);
-                        if (sta != NULL) {
-                            dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), dst_mac_str);
-                            printf("%s:%d Sta List build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
-                            dm_easy_mesh_t::macbytes_to_string(sta->get_sta_info()->radiomac, dst_mac_str);
-                            printf("%s:%d Sta List build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
+                if ((m_sta_assoc_map != NULL) && (*m_sta_assoc_map != NULL)) {
+                    sta = (dm_sta_t *)hash_map_get_first(*m_sta_assoc_map);
+                    if (sta != NULL) {
+                        dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), dst_mac_str);
+                        printf("%s:%d Sta List build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
+                        dm_easy_mesh_t::macbytes_to_string(sta->get_sta_info()->radiomac, dst_mac_str);
+                        printf("%s:%d Sta List build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
 
-                            if(memcmp(em->get_radio_interface_mac(),&sta->get_sta_info()->radiomac,sizeof(mac_address_t)) == 0) {
-                                printf("%s:%d Sta List build candidate MAC=%s push to queue\n", __func__, __LINE__,dst_mac_str);
-                                queue_push(pcmd->m_em_candidates, em);
-                                count++;
-                           }
-
+                        if (memcmp(em->get_radio_interface_mac(),&sta->get_sta_info()->radiomac,sizeof(mac_address_t)) == 0) {
+                            printf("%s:%d Sta List build candidate MAC=%s push to queue\n", __func__, __LINE__,dst_mac_str);
+                            queue_push(pcmd->m_em_candidates, em);
+                            count++;
                         }
                     }
+                }
+#endif
                 break;	
 	        case em_cmd_type_ap_cap_query:
                 if (!(em->is_al_interface_em())) {
@@ -273,6 +281,30 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
                         count++;
                         dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), dst_mac_str);
                         printf("%s:%d Client CAP report build candidate MAC=%s\n", __func__, __LINE__,dst_mac_str);
+                    }
+                }
+                break;
+
+            case em_cmd_type_assoc_sta_link_metrics:
+                assoc_clt = (hash_map_t **) pcmd->get_data_model()->get_sta_map();
+                em_m_sta_map = em->get_data_model()->get_sta_map();
+                msta = (dm_sta_t *)hash_map_get_first(*assoc_clt);
+                if ((*assoc_clt != NULL) &&  (assoc_clt != NULL) && (*em_m_sta_map != NULL) && (em_m_sta_map != NULL) && (msta != NULL)) {
+                    active_sta = (dm_sta_t *)hash_map_get_first(*em_m_sta_map);
+                    while (active_sta != NULL) {
+                        dm_easy_mesh_t::macbytes_to_string(active_sta->get_sta_info()->id, dst_mac_str);
+                        printf("\n%s:%d [DEBUG]: EM active sta client id %s\n", __func__, __LINE__, dst_mac_str);
+                        dm_easy_mesh_t::macbytes_to_string(msta->get_sta_info()->id, dst_mac_str);
+                        printf("%s:%d [DEBUG]: DM sta client id %s\n", __func__, __LINE__, dst_mac_str);
+
+                        if (strncmp((char *)active_sta->get_sta_info()->id,(char *)msta->get_sta_info()->id,sizeof(mac_address_t)) == 0) {
+                            queue_push(pcmd->m_em_candidates, em);
+                            count++;
+                            dm_easy_mesh_t::macbytes_to_string(msta->get_sta_info()->id, dst_mac_str);
+                            printf("%s:%d [DEBUG]: EM sta pushed client id %s\n", __func__, __LINE__, dst_mac_str);
+                        }
+                        //active_sta = (dm_sta_t *)hash_map_get_next(*em_m_sta_map, msta);
+                        active_sta = (dm_sta_t *)hash_map_get_next(*em_m_sta_map, active_sta);
                     }
                 }
                 break;

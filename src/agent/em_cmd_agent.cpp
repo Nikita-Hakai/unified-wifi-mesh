@@ -275,6 +275,10 @@ em_event_t *em_cmd_agent_t::create_raw_event(char *buff, em_bus_event_type_t typ
     {
         cmd = &em_cmd_agent_t::m_client_cmd_spec[5];
     }
+    else if(type == em_bus_event_type_assoc_sta_link_metrics)
+    {
+        cmd = &em_cmd_agent_t::m_client_cmd_spec[5];
+    }
 
     bevt->type = type;
 

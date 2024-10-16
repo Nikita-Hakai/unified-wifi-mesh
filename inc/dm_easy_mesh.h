@@ -72,6 +72,7 @@ public:
     int analyze_ap_cap_query(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     int analyze_autoconfig_renew(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     int analyze_client_cap_query(em_bus_event_t *evt, em_cmd_t *pcmd[]);
+    virtual int analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em_cmd_t *pcmd[]);
 
     int decode_config(em_subdoc_info_t *subdoc, const char *key);
     int decode_config_reset(em_subdoc_info_t *subdoc, const char *key);
@@ -217,6 +218,7 @@ public:
     static void create_autoconfig_renew_json_cmd(char* src_mac_addr, char* agent_al_mac, em_freq_band_t freq_band, char* autoconfig_renew_json);
     static void create_client_cap_query_json_cmd(char* src_mac_addr, char* agent_al_mac, char* ap_query_json, short msg_id, char *mac);
     static void create_ap_cap_query_json_cmd(char* src_mac_addr, char* agent_al_mac, char* ap_query_json, short msg_id);
+    static void create_assoc_sta_link_metrics_json_cmd(char* sta_mac_str, char* assoc_sta_link_metrics_json);
     void print_config();
 
     unsigned int get_db_cfg_type() { return m_db_cfg_type; }

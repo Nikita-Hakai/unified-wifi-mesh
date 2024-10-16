@@ -2025,13 +2025,14 @@ int em_configuration_t::handle_encrypted_settings()
     }
 
     if ((radio != NULL) && (bss != NULL)) {
-    radio->enabled = true;
-    memcpy(&bss->bssid.mac, get_radio_interface_mac(), sizeof(mac_address_t));
-    memcpy(&bss->ssid, &ssid, sizeof(bss->ssid));
-    memcpy(&bss->passphrase, &pass,sizeof(bss->passphrase));
-    bss->sec_mode =  authtype;
-    printf("%s:%d Recived new config ssid=%s mode=%d pass=%s \n", __func__, __LINE__,ssid,bss->sec_mode,bss->passphrase);
-    construct_private_subdoc();
+        radio->enabled = true;
+        memcpy(&bss->bssid.mac, get_radio_interface_mac(), sizeof(mac_address_t));
+        memcpy(&bss->ssid, &ssid, sizeof(bss->ssid));
+        memcpy(&bss->passphrase, &pass,sizeof(bss->passphrase));
+        bss->sec_mode =  authtype;
+        printf("%s:%d Recived new config ssid=%s mode=%d pass=%s \n", __func__, __LINE__,ssid,bss->sec_mode,bss->passphrase);
+        construct_private_subdoc();
+        set_state(em_state_agent_prov_complete);
     } else {
         printf("%s:%d vap details update failed\n", __func__, __LINE__);
     }
