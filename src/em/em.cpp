@@ -96,6 +96,7 @@ void em_t::orch_execute(em_cmd_t *pcmd)
         case em_cmd_type_dev_test:
 			m_state = em_state_ctrl_channel_query_pending;
 			break;
+
         case em_cmd_type_assoc_sta_link_metrics:
             m_state = em_state_agent_assoc_sta_link_metrics;
             break;
