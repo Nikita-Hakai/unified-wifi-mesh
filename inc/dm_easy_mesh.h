@@ -30,8 +30,8 @@
 #include "dm_dpp.h"
 #include "dm_op_class.h"
 #include "dm_radio_cap.h"
-#include "webconfig_external_proto.h"
 #include "dm_cac_comp.h"
+#include "webconfig_external_proto.h"
 
 class em_t;
 
@@ -74,10 +74,11 @@ public:
     int analyze_client_cap_query(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     virtual int analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em_cmd_t *pcmd[]);
 
-    int decode_config(em_subdoc_info_t *subdoc, const char *key);
+    int decode_config(em_subdoc_info_t *subdoc, const char *key, unsigned int index = 0, unsigned int *num = NULL);
     int decode_config_reset(em_subdoc_info_t *subdoc, const char *key);
     int decode_config_test(em_subdoc_info_t *subdoc, const char *key);
     int decode_config_set_ssid(em_subdoc_info_t *subdoc, const char *key);
+    int decode_config_set_channel(em_subdoc_info_t *subdoc, const char *key, unsigned int index, unsigned int *num);
     int decode_config_op_class_array(cJSON *arr_obj, em_op_class_type_t type, unsigned char *mac);
     
     int encode_config(em_subdoc_info_t *subdoc, const char *key);
@@ -93,8 +94,9 @@ public:
     int commit_config(dm_easy_mesh_t& dm, em_commit_target_t target);
     int commit_config(em_tlv_type_t tlv, unsigned char *data, unsigned int len, bssid_t id, em_commit_target_t target);
     int commit_config(em_attrib_id_t attrib, unsigned char *data, unsigned int len, bssid_t id, em_commit_target_t target);
-    int commit_config(dm_easy_mesh_t& dm, unsigned int radio_index, unsigned int vap_index);
+    int commit_config(dm_easy_mesh_t& dm, unsigned int radio_index, unsigned int vap_index, unsigned int num_radios, unsigned int num_bss);
     int commit_config(em_cmd_t  *cmd);
+    int commit_bss_config(dm_easy_mesh_t& dm, unsigned int vap_index);
 
     void set_network(dm_network_t &network) { m_network = network; }
 

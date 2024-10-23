@@ -182,6 +182,25 @@ void em_agent_t::handle_assoc_sta_link_metrics(em_bus_event_t *evt)
     }
 }
 
+void em_agent_t::handle_onewifi_cb(em_bus_event_t *evt)
+{
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    unsigned int num;
+    wifi_bus_desc_t *desc;
+
+    if ((desc = get_bus_descriptor()) == NULL) {
+        printf("descriptor is null");
+    }
+
+    if (m_orch->is_cmd_type_in_progress(evt->type) == true) {
+        m_agent_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
+    } else if ((num = m_data_model.analyze_onewifi_cb(evt, pcmd)) == 0) {
+        printf("analyze_onewifi_cb completed\n");
+    } else if (m_orch->submit_commands(pcmd, num) > 0) {
+        printf("submitted command for orchestration\n");
+    }
+}
+
 void em_agent_t::handle_vendor_public_action_frame(struct ieee80211_mgmt *frame)
 {
 
@@ -276,8 +295,11 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
 	        break;
 
         case em_bus_event_type_onewifi_private_subdoc:
-			handle_onewifi_private_subdoc(evt);
+            handle_onewifi_private_subdoc(evt);
 			break;
+        case em_bus_event_type_onewifi_cb:
+            handle_onewifi_cb(evt);
+            break;
 
         case em_bus_event_type_assoc_sta_link_metrics:
             handle_assoc_sta_link_metrics(evt);
@@ -390,7 +412,11 @@ void em_agent_t::input_listener()
 
     g_agent.agent_input(&evt);
 
-    printf("%s:%d: Enter\n", __func__, __LINE__);
+    if (desc->bus_event_subs_fn(&m_bus_hdl, WIFI_WEBCONFIG_DOC_DATA_NORTH, (void *)&em_agent_t::onewifi_cb, NULL, 0) != 0) {
+        printf("%s:%d bus get failed\n", __func__, __LINE__);
+        return;
+    }
+
     if (desc->bus_event_subs_fn(&m_bus_hdl, WIFI_WEBCONFIG_GET_ASSOC, (void *)&em_agent_t::sta_cb, NULL, 0) != 0) {
         printf("%s:%d bus get failed\n", __func__, __LINE__);
         return;
@@ -518,6 +544,20 @@ void* em_agent_t::assoc_stats(void* arg) {
     g_agent.agent_input(&evt);
 }
 
+int em_agent_t::onewifi_cb(char *event_name, raw_data_t *data)
+{
+    em_event_t evt;
+    em_bus_event_t *bevt;
+
+    bevt = &evt.u.bevt;
+    bevt->type = em_bus_event_type_onewifi_cb;
+    memcpy(bevt->u.raw_buff, data->raw_data.bytes, data->raw_data_len);
+
+    g_agent.agent_input(&evt);
+
+    return 1;
+}
+
 int em_agent_t::assoc_stats_cb(char *event_name, raw_data_t *data)
 {
     printf("%s:%d recv data:\r\n%s\r\n", __func__, __LINE__, (char *)data->raw_data.bytes);
@@ -532,7 +572,6 @@ int em_agent_t::assoc_stats_cb(char *event_name, raw_data_t *data)
 
     return 1;
 }
-
 
 int em_agent_t::data_model_init(const char *data_model_path)
 {
@@ -626,6 +665,19 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 
         case em_msg_type_autoconf_search:
         case em_msg_type_topo_query:
+            em = (em_t *)hash_map_get_first(m_em_map);
+
+            while (em != NULL) {
+                if (!(em->is_al_interface_em())) {
+                    if (em->get_state() == em_state_agent_onewifi_bssconfig_ind) {
+                        break;
+                    }
+                }
+                em = (em_t *)hash_map_get_next(m_em_map, em);
+            }
+            break;
+        case em_msg_type_channel_pref_query:
+            printf("Received channel preference query\n");
             break;
 
 		default:
