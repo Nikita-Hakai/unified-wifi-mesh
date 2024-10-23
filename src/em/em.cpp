@@ -110,7 +110,7 @@ void em_t::orch_execute(em_cmd_t *pcmd)
 			break;
 
         case em_cmd_type_assoc_sta_link_metrics:
-            m_state = em_state_agent_assoc_sta_link_metrics;
+            //m_state = em_state_agent_assoc_sta_link_metrics;
             break;
 
         case em_cmd_type_onewifi_cb:
@@ -136,6 +136,25 @@ void em_t::handle_timeout()
     //printf("%s:%d: em timeout\n", __func__, __LINE__);
 }
 
+/*
+unsigned char *g_data;
+unsigned int g_len;
+volatile int thread_running = 0; // Flag to indicate thread status
+//TODO: Remove below test code later
+void* em_t::link_query(void* arg) {
+    thread_running = 1;
+    sleep(30);
+    printf("\n\n\n [DEBUG]: Link Query triggerd called after 20 seconds\n");
+
+    em_cmdu_t *cmdu;
+    cmdu = (em_cmdu_t *)(g_data + sizeof(em_raw_hdr_t));
+    cmdu->type = em_msg_type_assoc_sta_link_metrics_query;
+
+    em_metrics_t *inst = static_cast<em_metrics_t *>(arg);
+    inst->process_msg(g_data, g_len);
+    printf("\n\n\n [DEBUG]: Link Query processed\n");
+}*/
+
 void em_t::proto_process(unsigned char *data, unsigned int len)
 {
     em_raw_hdr_t *hdr;
@@ -156,6 +175,21 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_topo_resp:
         case em_msg_type_topo_query:
             em_configuration_t::process_msg(data, len);
+            
+            //TODO: Test code, remove later
+            /*
+            if (!thread_running) 
+            //if(htons(cmdu->type) == em_msg_type_autoconf_search)
+            {
+                pthread_t t_assoc_stats;
+                // Create a new thread that will run the delayed_function
+                if (pthread_create(&t_assoc_stats, NULL, em_t::link_query, NULL) != 0) {
+                    fprintf(stderr, "Error creating thread\n");
+                }
+                g_data = data; g_len = len;
+                pthread_detach(t_assoc_stats);
+            }*/
+
             break;
 
         case em_msg_type_ap_cap_query:

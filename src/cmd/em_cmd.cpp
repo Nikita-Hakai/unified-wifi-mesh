@@ -447,6 +447,12 @@ void em_cmd_t::init()
             strncpy(m_name, "em_config", strlen("em_config") + 1);
             m_svc = em_service_type_ctrl;
             break;
+
+        case em_cmd_type_assoc_sta_link_metrics_query:
+            strncpy(m_name, "link_metrics", strlen("link_metrics") + 1);
+            m_svc = em_service_type_agent;
+            break;
+
     }
 }
 
@@ -478,7 +484,7 @@ const char *em_cmd_t::get_bus_event_type_str(em_bus_event_type_t type)
     BUS_EVENT_TYPE_2S(em_bus_event_type_listener_stop)
     BUS_EVENT_TYPE_2S(em_bus_event_type_dm_commit)
     BUS_EVENT_TYPE_2S(em_bus_event_type_topo_sync)
-    BUS_EVENT_TYPE_2S(em_bus_event_type_assoc_sta_link_metrics)
+    BUS_EVENT_TYPE_2S(em_bus_event_type_assoc_sta_link_metrics_query)
     }
 }   
 
@@ -538,7 +544,7 @@ const char *em_cmd_t::get_orch_op_str(dm_orch_type_t type)
         ORCH_TYPE_2S(dm_orch_type_topo_sync)
         ORCH_TYPE_2S(dm_orch_type_channel_pref)
         ORCH_TYPE_2S(dm_orch_type_channel_sel)
-        ORCH_TYPE_2S(dm_orch_type_assoc_sta_link_metrics_report)
+        //ORCH_TYPE_2S(dm_orch_type_assoc_sta_link_metrics_query)
     }
 
     return "dm_orch_type_unknown";
@@ -572,7 +578,7 @@ const char *em_cmd_t::get_cmd_type_str(em_cmd_type_t type)
         CMD_TYPE_2S(em_cmd_type_client_cap_query)
         CMD_TYPE_2S(em_cmd_type_topo_sync)
         CMD_TYPE_2S(em_cmd_type_em_config)
-        CMD_TYPE_2S(em_cmd_type_assoc_sta_link_metrics)
+        CMD_TYPE_2S(em_cmd_type_assoc_sta_link_metrics_query)
     }
 
     return "em_cmd_type_unknown";
@@ -659,8 +665,8 @@ em_cmd_type_t em_cmd_t::bus_2_cmd_type(em_bus_event_type_t etype)
 			type = em_cmd_type_onewifi_private_subdoc;
             break;
 
-        case em_bus_event_type_assoc_sta_link_metrics:
-            type = em_cmd_type_assoc_sta_link_metrics;
+        case em_bus_event_type_assoc_sta_link_metrics_query:
+            type = em_cmd_type_assoc_sta_link_metrics_query;
             break;
 
     }
@@ -705,8 +711,8 @@ em_bus_event_type_t em_cmd_t::cmd_2_bus_event_type(em_cmd_type_t ctype)
 			type = em_bus_event_type_onewifi_private_subdoc;
             break;
 
-        case em_cmd_type_assoc_sta_link_metrics:
-            type = em_bus_event_type_assoc_sta_link_metrics;
+        case em_cmd_type_assoc_sta_link_metrics_query:
+            type = em_bus_event_type_assoc_sta_link_metrics_query;
             break;
     }
 

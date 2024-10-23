@@ -340,6 +340,8 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
                 break;
 
             case em_cmd_type_assoc_sta_link_metrics:
+            case em_cmd_type_assoc_sta_link_metrics_query:
+                printf("%s:%d {DEBUG} em_cmd_type_assoc_sta_link_metrics_query\n", __func__, __LINE__);
                 assoc_clt = (hash_map_t **) pcmd->get_data_model()->get_sta_map();
                 em_m_sta_map = em->get_data_model()->get_sta_map();
                 msta = (dm_sta_t *)hash_map_get_first(*assoc_clt);

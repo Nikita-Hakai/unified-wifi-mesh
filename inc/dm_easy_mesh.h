@@ -73,6 +73,7 @@ public:
     int analyze_autoconfig_renew(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     int analyze_client_cap_query(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     virtual int analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em_cmd_t *pcmd[]);
+    virtual int analyze_assoc_sta_link_metrics_query(em_bus_event_t *evt, em_cmd_t *pcmd[]);
 
     int decode_config(em_subdoc_info_t *subdoc, const char *key, unsigned int index = 0, unsigned int *num = NULL);
     int decode_config_reset(em_subdoc_info_t *subdoc, const char *key);
@@ -80,6 +81,7 @@ public:
     int decode_config_set_ssid(em_subdoc_info_t *subdoc, const char *key);
     int decode_config_set_channel(em_subdoc_info_t *subdoc, const char *key, unsigned int index, unsigned int *num);
     int decode_config_op_class_array(cJSON *arr_obj, em_op_class_type_t type, unsigned char *mac);
+    int decode_assoc_sta_metrics_query(em_subdoc_info_t *subdoc, const char *str, char *clientmac);
     
     int encode_config(em_subdoc_info_t *subdoc, const char *key);
     int encode_config_reset(em_subdoc_info_t *subdoc, const char *key);

@@ -50,6 +50,12 @@ bool em_msg_t::get_tlv(em_tlv_t *itlv)
 
 bool em_msg_t::get_client_mac_info(mac_address_t *mac)
 {
+    //TODO: Test code, remove later
+    /*
+    mac_address_t test = {0x16,0x24,0x75,0xc1,0x79,0x0f};
+    memcpy(mac, &test, sizeof(mac_address_t));
+    return true;//WORKAROUND*/
+
         em_tlv_t    *tlv;
         int len;
        em_client_info_t *cltinfo;

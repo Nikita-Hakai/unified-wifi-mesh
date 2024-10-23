@@ -50,6 +50,7 @@ em_cmd_t em_cmd_agent_t::m_client_cmd_spec[] = {
     em_cmd_t(em_cmd_type_sta_list,em_cmd_params_t{1, {"", "", "", "", ""}, "wfa-dataelements:StaList"}),
     em_cmd_t(em_cmd_type_ap_cap_query,em_cmd_params_t{1, {"", "", "", "", ""}, "wfa-dataelements:CapReport"}),
     em_cmd_t(em_cmd_type_client_cap_query,em_cmd_params_t{1, {"", "", "", "", ""}, "wfa-dataelements:ClientCapReport"}),
+    em_cmd_t(em_cmd_type_assoc_sta_link_metrics_query,em_cmd_params_t{1, {"", "", "", "", ""}, "wfa-dataelements:AssocLinkMetrics"}),
     em_cmd_t(em_cmd_type_onewifi_private_subdoc,em_cmd_params_t{1, {"", "", "", "", ""},"wfa-dataelements:dm_cache"}),
     em_cmd_t(em_cmd_type_max,em_cmd_params_t{0, {"", "", "", "", ""}, "max"}),
 };
@@ -235,6 +236,10 @@ em_event_t *em_cmd_agent_t::create_event(char *buff)
 			bevt->type = em_bus_event_type_onewifi_private_subdoc;
 			break;
 
+        case em_cmd_type_assoc_sta_link_metrics_query:
+            bevt->type = em_bus_event_type_assoc_sta_link_metrics_query;
+            break;
+
          default:
             break;
     }
@@ -277,7 +282,8 @@ em_event_t *em_cmd_agent_t::create_raw_event(char *buff, em_bus_event_type_t typ
     }
     else if(type == em_bus_event_type_assoc_sta_link_metrics)
     {
-        cmd = &em_cmd_agent_t::m_client_cmd_spec[5];
+        //cmd = &em_cmd_agent_t::m_client_cmd_spec[5];
+        cmd = &em_cmd_agent_t::m_client_cmd_spec[8];
     }
 
     bevt->type = type;

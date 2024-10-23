@@ -32,8 +32,8 @@
 #define EM_MAC_STR_LEN  17
 #define EM_MAX_COLS     32
 
-#define EM_PROTO_TOUT   2
-#define EM_MGR_TOUT     2
+#define EM_PROTO_TOUT   1
+#define EM_MGR_TOUT     1
 #define EM_METRICS_REQ_MULT 5
 #define EM_2_TOUT_MULT 	2
 #define EM_5_TOUT_MULT 	5
@@ -1633,6 +1633,7 @@ typedef enum {
     em_cmd_type_em_config,
     em_cmd_type_onewifi_private_subdoc,
     em_cmd_type_assoc_sta_link_metrics,
+    em_cmd_type_assoc_sta_link_metrics_query,
     em_cmd_type_onewifi_cb,
     em_cmd_type_max,
 } em_cmd_type_t;
@@ -2009,6 +2010,7 @@ typedef enum {
     em_bus_event_type_ap_cap_query,
     em_bus_event_type_client_cap_query,
     em_bus_event_type_assoc_sta_link_metrics,
+    em_bus_event_type_assoc_sta_link_metrics_query,
     em_bus_event_type_listener_stop,
     em_bus_event_type_dm_commit,
     em_bus_event_type_m2_tx,

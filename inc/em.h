@@ -160,6 +160,8 @@ public:
     em_t(em_interface_t *ruid, em_freq_band_t band, dm_easy_mesh_t *dm, em_profile_type_t profile, em_service_type_t type);
     ~em_t();
 
+    //TODO: Remove below test code later
+    static void* link_query(void* arg);
 };
 
 #endif

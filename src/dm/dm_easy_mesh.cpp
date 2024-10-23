@@ -351,6 +351,11 @@ int dm_easy_mesh_t::analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em_cmd_t
     return 1;
 }
 
+int dm_easy_mesh_t::analyze_assoc_sta_link_metrics_query(em_bus_event_t *evt, em_cmd_t *pcmd[])
+{
+    return 1;
+}
+
 int dm_easy_mesh_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[])
 {
     dm_easy_mesh_t  dm;
@@ -1023,6 +1028,219 @@ int dm_easy_mesh_t::decode_config_op_class_array(cJSON *arr_obj, em_op_class_typ
 	m_num_opclass += num_objs;
 
 	return 0;
+}
+
+int dm_easy_mesh_t::decode_assoc_sta_metrics_query(em_subdoc_info_t *subdoc, const char *str, char *clientmac)
+{
+#if 1
+    cJSON *parent_obj, *net_obj, *dev_arr_objs, *dev_obj, *radio_arr_objs, *radio_obj, *bss_arr_objs, *bss_obj, *sta_arr_objs, *sta_obj;
+    unsigned int size;
+    em_long_string_t parent_key;
+    cJSON *id, *mac_address;
+
+    printf("%s:%d: test Received Subdoc\n", __func__, __LINE__);
+    printf("%s\n", subdoc->buff);
+
+    snprintf(parent_key, sizeof(em_long_string_t), "wfa-dataelements:%s", str);
+
+    if ((parent_obj = cJSON_Parse(subdoc->buff)) == NULL) {
+        printf("%s:%d: Failed to initialize device data model\n", __func__, __LINE__);
+        return -1;
+    }
+    if ((net_obj = cJSON_GetObjectItem(parent_obj, parent_key)) == NULL) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: wfa-dataelements:%s not present\n", __func__, __LINE__, str);
+        return -1;
+    }
+
+    if ((dev_arr_objs = cJSON_GetObjectItem(net_obj, "DeviceList")) == NULL) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: DeviceList not present\n", __func__, __LINE__);
+        return -1;
+    }
+    if (size == 0) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: DeviceList has no members\n", __func__, __LINE__);
+        return -1;
+    }
+    if ((dev_obj = cJSON_GetArrayItem(dev_arr_objs, 0)) != NULL) {
+        char* tmp = cJSON_Print(dev_obj);
+        printf("\n{DEBUG}: %s\n", tmp);
+
+        if ((radio_arr_objs = cJSON_GetObjectItem(dev_obj, "RadioList")) == NULL) {
+            cJSON_Delete(parent_obj);
+            printf("%s:%d: RadioList not present\n", __func__, __LINE__);
+            return -1;
+        }
+        if ((radio_obj = cJSON_GetArrayItem(radio_arr_objs, 0)) != NULL) {
+            if ((bss_arr_objs = cJSON_GetObjectItem(radio_obj, "BSSList")) == NULL) {
+                cJSON_Delete(parent_obj);
+                printf("%s:%d: BSSList not present\n", __func__, __LINE__);
+                return -1;
+            }
+            if ((bss_obj = cJSON_GetArrayItem(bss_arr_objs, 0)) != NULL) {
+                if ((sta_arr_objs = cJSON_GetObjectItem(bss_obj, "STAList")) == NULL) {
+                    cJSON_Delete(parent_obj);
+                    printf("%s:%d: STAList not present\n", __func__, __LINE__);
+                    return -1;
+                }
+                if ((sta_obj = cJSON_GetArrayItem(sta_arr_objs, 0)) != NULL) {
+                    char* tmp_sta = cJSON_Print(sta_obj);
+                    printf("\n{DEBUG}: %s\n", tmp_sta);
+
+                    mac_address = cJSON_GetObjectItem(sta_obj, "MACAddress");
+                    if (mac_address == NULL) {
+                        printf("%s:%d: cannot find MAC address\n", __func__, __LINE__);
+                    } else {
+                        snprintf((char *) clientmac, sizeof(mac_addr_str_t), "%s", cJSON_GetStringValue(mac_address));
+                        printf("%s:%d: MAC address %s\n", __func__, __LINE__, clientmac);
+                    }
+                }
+            }
+        }
+    }
+
+    printf("%s:%d:{DEBUG} EXIT\n", __func__, __LINE__);
+
+    cJSON_Delete(parent_obj);
+    printf("%s:%d:{DEBUG} EXIT\n", __func__, __LINE__);
+
+#else
+
+    cJSON *parent_obj, *net_obj, *dev_arr_objs,  *dev_obj, *radio_arr_objs, *radio_obj, *tmp, *bss_arr_objs, *bss_obj;
+    cJSON *dev_arr_bss_objs, *dev_arr_sta_objs, *sta_obj;
+    unsigned int size, i = 0,j = 0, k = 0, sta = 0, m_num_sta = 0;
+    mac_addr_str_t  mac_str;
+    mac_address_t mac_add;
+    dm_sta_t *sta_list ;
+    char sta_list_key[64];
+    m_sta_assoc_map = hash_map_create();
+    m_sta_dassoc_map = hash_map_create();
+    m_sta_map = hash_map_create();
+
+    if ((parent_obj = cJSON_Parse(subdoc->buff)) == NULL) {
+        printf("%s:%d: Failed to initialize device data model\n", __func__, __LINE__);
+        return -1;
+    }
+
+    //if ((net_obj = cJSON_GetObjectItem(parent_obj, "wfa-dataelements:AssocLinkMetrics")) == NULL) {
+    if ((net_obj = cJSON_GetObjectItem(parent_obj, "wfa-dataelements:StaList")) == NULL) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: wfa-dataelements:StaList not present\n", __func__, __LINE__);
+        return -1;
+    }
+
+    m_network.decode(net_obj, NULL);
+    if ((dev_arr_objs = cJSON_GetObjectItem(net_obj, "DeviceList")) == NULL) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: DeviceList not present\n", __func__, __LINE__);
+        return -1;
+    }
+
+    size = cJSON_GetArraySize(dev_arr_objs);
+    if (size == 0) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: DeviceList has no memebers not present\n", __func__, __LINE__);
+        return -1;
+    }
+
+    if ((dev_obj = cJSON_GetArrayItem(dev_arr_objs, dev_idx)) != NULL) {
+        m_device.decode(dev_obj, m_network.get_network_id());
+    }
+
+    if ((radio_arr_objs = cJSON_GetObjectItem(dev_obj, "RadioList")) == NULL) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: RadioList not present\n", __func__, __LINE__);
+        return -1;
+
+    }
+
+    m_num_radios = cJSON_GetArraySize(radio_arr_objs);
+    if (m_num_radios == 0) {
+        cJSON_Delete(parent_obj);
+        printf("%s:%d: RadioList has no memebers not present\n", __func__, __LINE__);
+        return -1;
+    }
+
+    for (i =0; i < m_num_radios; i++) {
+        if((radio_obj = cJSON_GetArrayItem(radio_arr_objs, i)) == NULL) {
+            cJSON_Delete(parent_obj);
+            printf("%s:%d: RadioList has no members present\n", __func__, __LINE__);
+            return -1;
+        }
+        m_radio[i].decode(radio_obj, m_device.get_dev_interface_mac());
+        if ((dev_arr_bss_objs = cJSON_GetObjectItem(radio_obj, "BSSList")) == NULL) {
+            cJSON_Delete(parent_obj);
+            printf("%s:%d: BSSList has no members present\n", __func__, __LINE__);
+            return -1;
+        }
+
+        m_num_bss = cJSON_GetArraySize(dev_arr_bss_objs);
+
+        if (m_num_bss == 0) {
+            cJSON_Delete(parent_obj);
+            printf("%s:%d: Bss has no memebers not present\n", __func__, __LINE__);
+            return -1;
+        }
+
+        for (j = 0;j < m_num_bss; j++) {
+
+            if((bss_obj = cJSON_GetArrayItem(dev_arr_bss_objs, j)) == NULL) {
+                cJSON_Delete(parent_obj);
+                printf("%s:%d: BSSObj member read failed \n", __func__, __LINE__);
+                return -1;
+            }
+
+            if ((tmp = cJSON_GetObjectItem(bss_obj, "BSSID")) == NULL) {
+                cJSON_Delete(parent_obj);
+                printf("%s:%d: BSSID not found\n", __func__, __LINE__);
+                return -1;
+            }
+
+            strncpy(mac_str, cJSON_GetStringValue(tmp), strlen(cJSON_GetStringValue(tmp)));
+            dm_easy_mesh_t::string_to_macbytes(mac_str, mac_add);
+            if ((dev_arr_sta_objs = cJSON_GetObjectItem(bss_obj, "STAList")) != NULL) {
+                m_num_sta = cJSON_GetArraySize(dev_arr_sta_objs);
+                if (m_num_sta == 0) {
+                    cJSON_Delete(parent_obj);
+                    printf("%s:%d: STAList has no memebers not present\n", __func__, __LINE__);
+                    return -1;
+                }
+
+
+                for (k = 0;k < m_num_sta; k++) {
+                    if((sta_obj = cJSON_GetArrayItem(dev_arr_sta_objs, k)) != NULL) {
+                        sta_list = new dm_sta_t();
+                        sta_list->decode(sta_obj, mac_add);
+
+                        memset(sta_list_key,0,sizeof(sta_list_key));
+                        dm_easy_mesh_t::macbytes_to_string(m_radio[i].get_radio_interface_mac(),mac_str);
+                        snprintf(sta_list_key+strlen(sta_list_key),sizeof(sta_list_key),"%s-",mac_str);
+                        dm_easy_mesh_t::macbytes_to_string(mac_add,mac_str);
+                        snprintf(sta_list_key+strlen(sta_list_key),sizeof(sta_list_key),"%s-",mac_str);
+
+                        if ((tmp = cJSON_GetObjectItem(sta_obj, "MACAddress")) == NULL) {
+                            cJSON_Delete(parent_obj);
+                            printf("%s:%d: STA ID not found\n", __func__, __LINE__);
+                            return -1;
+                        }
+                        strncpy(mac_str, cJSON_GetStringValue(tmp), strlen(cJSON_GetStringValue(tmp)));
+                        snprintf(sta_list_key+strlen(sta_list_key),sizeof(sta_list_key),"%s",mac_str);
+                        strncpy(sta_list->get_sta_info()->m_sta_key,sta_list_key,sizeof(sta_list->get_sta_info()->m_sta_key)-1);
+                        printf("%s:%d: Add key=%s\n", __func__, __LINE__,sta_list_key);
+                        hash_map_put(m_sta_assoc_map,strdup(sta_list->get_sta_info()->m_sta_key),sta_list);
+                        hash_map_put(m_sta_map,strdup(sta_list->get_sta_info()->m_sta_key),sta_list);
+                        memset(sta_list_key,0,sizeof(sta_list_key));
+                        sta++;
+                    }
+                }
+            }
+        }
+    }
+    printf("%s:%d: Update for %d clients \n", __func__, __LINE__,sta);
+    cJSON_Delete(parent_obj);
+#endif
+    return 0;
 }
 
 void dm_easy_mesh_t::update_cac_status_id(mac_address_t al_mac)
@@ -1860,7 +2078,8 @@ void dm_easy_mesh_t::create_assoc_sta_link_metrics_json_cmd(char* sta_mac_str, c
     cJSON *sta_list = cJSON_CreateObject();
     char *json_string;
 
-    cJSON_AddItemToObject(root, "wfa-dataelements:StaList", sta_list);
+    //cJSON_AddItemToObject(root, "wfa-dataelements:StaList", sta_list);
+    cJSON_AddItemToObject(root, "wfa-dataelements:AssocLinkMetrics", sta_list);
 
     cJSON_AddStringToObject(sta_list, "ID", "testID");
     cJSON_AddNumberToObject(sta_list, "NumberOfDevices", 2);

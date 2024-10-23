@@ -72,7 +72,6 @@ int dm_easy_mesh_agent_t::analyze_dev_init(em_bus_event_t *evt, em_cmd_t *pcmd[]
 int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[])
 {
     unsigned int index = 0;
-    //dm_orch_type_t op;
     em_orch_desc_t desc;
     //put hash_map for dm_pcmd from this object
     mac_address_t radio_macaddr, temp_rmacaddr;
@@ -200,16 +199,61 @@ int dm_easy_mesh_agent_t::analyze_assoc_sta_link_metrics(em_bus_event_t *evt, em
         printf("%s:%d assoc sta link metrics decode fail\n",__func__, __LINE__);
     }
 
-    desc.op = dm_orch_type_assoc_sta_link_metrics_report;
+    /*desc.op = dm_orch_type_assoc_sta_link_metrics_report;
     desc.submit = true;
     //dm.decode_assoc_sta_metrics(subdoc, 0);
     //dm_easy_mesh_agent_t  *dm = this;
     pcmd[0] = new em_cmd_assoc_sta_link_metrics_t(evt->params, *this);
     //pcmd[0] = new em_cmd_assoc_sta_link_metrics_t(evt->params, *dm);
-    pcmd[0]->override_op(0, &desc);
+    pcmd[0]->override_op(0, &desc);*/
 
     return 1;
 }
+
+int dm_easy_mesh_agent_t::analyze_assoc_sta_link_metrics_query(em_bus_event_t *evt, em_cmd_t *pcmd[])
+{
+    printf("%s:%d:{DEBUG} START\n", __func__, __LINE__);
+    dm_easy_mesh_t  dm;
+    em_orch_desc_t desc;
+    em_subdoc_info_t *subdoc;
+    mac_addr_str_t cli_macstr, radio_str_mac;
+    mac_address_t cli_mac, radio_mac;
+    mac_address_t test = {0x16,0x24,0x75,0xc1,0x79,0x0f};
+    mac_addr_str_t mac_str;
+
+    desc.op = dm_orch_type_assoc_sta_link_metrics_report;
+    desc.submit = true;
+
+    subdoc = &evt->u.subdoc;
+
+    dm_sta_t *sta = new dm_sta_t();;
+    hash_map_t **m_sta_map = (hash_map_t **)dm.get_sta_map();
+
+    *m_sta_map = hash_map_create();
+
+    dm.decode_assoc_sta_metrics_query(subdoc, "AssocLinkMetrics", cli_macstr);
+        printf("%s:%d:{DEBUG} here\n", __func__, __LINE__);
+    string_to_macbytes(cli_macstr, cli_mac);
+    //string_to_macbytes(cli_macstr, cli_mac);
+    //string_to_macbytes(radio_str_mac, radio_mac);
+    printf("%s:%d: StaList msg id %d\n", __func__, __LINE__,dm.msg_id);
+    printf("%s:%d: client mac %s\n", __func__, __LINE__,cli_macstr);
+    //printf("%s:%d: Radio mac %s\n", __func__, __LINE__,radio_str_mac);
+
+    memcpy(sta->get_sta_info()->id, &cli_mac, sizeof(mac_address_t));
+    //memcpy(sta->get_sta_info()->bssid,&bss_mac,sizeof(mac_address_t)); TODO once cache is available
+    hash_map_put(*m_sta_map, strdup(cli_macstr), sta);
+    //memcpy(dm.m_radio[0].get_radio_info()->id.mac,&radio_mac,sizeof(mac_address_t));
+    dm.m_num_radios = 1;
+
+    //dm_easy_mesh_t::macbytes_to_string(dm.m_radio[0].get_radio_info()->id.mac,mac_str);//TODO: DEBUG
+
+    pcmd[0] = new em_cmd_assoc_sta_link_metrics_t(evt->params, dm);
+    pcmd[0]->override_op(0, &desc);
+        printf("%s:%d:{DEBUG} here end\n", __func__, __LINE__);
+    return 1;
+}
+
 
 void dm_easy_mesh_agent_t::translate_onewifi_dml_data (char *str)
 {           
@@ -289,7 +333,7 @@ int dm_easy_mesh_agent_t::analyze_onewifi_private_subdoc(em_bus_event_t *evt, wi
     }
     memset(&l_bus_data, 0, sizeof(raw_data_t));
 
-    l_bus_data.data_type    = bus_data_type_bytes;
+    l_bus_data.data_type    = bus_data_type_string;
     l_bus_data.raw_data.bytes   = webconfig_easymesh_raw_data_ptr;
     l_bus_data.raw_data_len = strlen(webconfig_easymesh_raw_data_ptr);
     if (desc->bus_set_fn(bus_hdl, "Device.WiFi.WebConfig.Data.Subdoc.South", &l_bus_data)== 0) {

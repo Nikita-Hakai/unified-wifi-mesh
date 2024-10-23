@@ -175,12 +175,33 @@ void em_agent_t::handle_assoc_sta_link_metrics(em_bus_event_t *evt)
         m_agent_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
     } else if ((num = m_data_model.analyze_assoc_sta_link_metrics(evt, pcmd)) == 0) {
         m_agent_cmd->send_result(em_cmd_out_status_no_change);
-    } else if (m_orch->submit_commands(pcmd, num) > 0) {
-        /*m_agent_cmd->send_result(em_cmd_out_status_success);
+    /*} else if (m_orch->submit_commands(pcmd, num) > 0) {
+        m_agent_cmd->send_result(em_cmd_out_status_success);
     } else {
         m_agent_cmd->send_result(em_cmd_out_status_not_ready);*/
     }
 }
+
+void em_agent_t::handle_assoc_sta_link_metrics_query(em_bus_event_t *evt)
+{
+    printf("%s:%d {DEBUG}\n\n", __func__, __LINE__);
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    unsigned int num;
+
+    if (m_orch->is_cmd_type_in_progress(evt->type) == true) {
+        m_agent_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
+    } else if ((num = m_data_model.analyze_assoc_sta_link_metrics_query(evt, pcmd)) == 0) {
+        printf("%s:%d {DEBUG} analyze_assoc_sta_link_metrics_query FAILLLLL\n\n", __func__, __LINE__);
+        //m_agent_cmd->send_result(em_cmd_out_status_no_change);
+    } else if (m_orch->submit_commands(pcmd, num) > 0) {
+        printf("%s:%d {DEBUG} submit_commands() success\n\n", __func__, __LINE__);
+        //m_agent_cmd->send_result(em_cmd_out_status_success);
+    } /*else {
+        m_agent_cmd->send_result(em_cmd_out_status_not_ready);
+    }*/
+    printf("%s:%d {DEBUG} ENDDDD \n\n", __func__, __LINE__);
+}
+
 
 void em_agent_t::handle_onewifi_cb(em_bus_event_t *evt)
 {
@@ -302,7 +323,17 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
             break;
 
         case em_bus_event_type_assoc_sta_link_metrics:
+            printf("%s:%d {DEBUG} ############## em_bus_event_type_assoc_sta_link_metrics\n", __func__, __LINE__);
             handle_assoc_sta_link_metrics(evt);
+            //TODO: Remove later, test code
+            /*sleep(10);
+            printf("########%s:%d {DEBUG} em_bus_event_type_assoc_sta_link_metrics_query\n", __func__, __LINE__);
+            handle_assoc_sta_link_metrics_query(evt);*/
+            break;
+
+        case em_bus_event_type_assoc_sta_link_metrics_query:
+            printf("%s:%d {DEBUG} em_bus_event_type_assoc_sta_link_metrics_query\n", __func__, __LINE__);
+            handle_assoc_sta_link_metrics_query(evt);
             break;
 
         default:
@@ -399,7 +430,8 @@ void em_agent_t::input_listener()
 
     memset(&data, 0, sizeof(raw_data_t));
 
-    if (desc->bus_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data) != 0) {
+    //if (desc->bus_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data) != 0) {
+    if (desc->bus_data_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data) != 0) {
         printf("%s:%d bus get failed\n", __func__, __LINE__);
         return;
     } else {

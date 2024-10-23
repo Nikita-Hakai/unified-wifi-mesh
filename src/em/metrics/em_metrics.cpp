@@ -41,7 +41,7 @@
 #include "em_msg.h"
 #include "em_cmd_exec.h"
 
-int em_metrics_t::handle_assoc_sta_link_metrics_query(unsigned char* buff, unsigned int len)
+int em_metrics_t::handle_assoc_sta_link_metrics_cquery(unsigned char* buff, unsigned int len)
 {
     em_tlv_t *tlv;
     em_raw_hdr_t *hdr;
@@ -56,10 +56,10 @@ int em_metrics_t::handle_assoc_sta_link_metrics_query(unsigned char* buff, unsig
     em_service_type_t to_svc;
     em_long_string_t res;
 
-    if (em_msg_t(em_msg_type_assoc_sta_link_metrics_query, em_profile_type_2, buff, len).validate(errors) == 0) {
+    /*if (em_msg_t(em_msg_type_assoc_sta_link_metrics_query, em_profile_type_2, buff, len).validate(errors) == 0) {
         printf("assoc link metrics query validation failed\n");
         return -1;
-    }
+    }*/
 
     hdr = (em_raw_hdr_t *)buff;
     if (em_msg_t(buff + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
@@ -71,15 +71,17 @@ int em_metrics_t::handle_assoc_sta_link_metrics_query(unsigned char* buff, unsig
     evt.type = em_event_type_bus;
     bevt = &evt.u.bevt;
     to_svc = em_service_type_agent;
-    bevt->type = em_bus_event_type_assoc_sta_link_metrics;
+    bevt->type = em_bus_event_type_assoc_sta_link_metrics_query;
     info = &bevt->u.subdoc;
 
-    dm_easy_mesh_t::create_assoc_sta_link_metrics_json_cmd(sta_mac_str, assoc_sta_link_metrics_json);
+    //dm_easy_mesh_t::create_assoc_sta_link_metrics_json_cmd(sta_mac_str, assoc_sta_link_metrics_json);
+    dm_easy_mesh_t::create_assoc_sta_link_metrics_json_cmd(sta_mac_str, info->buff);
 
     to_svc = em_service_type_agent;
-    info->sz = strlen(assoc_sta_link_metrics_json);
-    strncpy(info->buff,assoc_sta_link_metrics_json,strlen(assoc_sta_link_metrics_json)+1);
-    em_cmd_exec_t::send_cmd(to_svc, (unsigned char *)&evt, sizeof(em_event_t), res, sizeof(em_long_string_t));
+    //info->sz = strlen(assoc_sta_link_metrics_json);
+    info->sz = sizeof(em_subdoc_data_buff_t);
+    //strncpy(info->buff,assoc_sta_link_metrics_json,strlen(assoc_sta_link_metrics_json)+1);
+    em_cmd_exec_t::send_cmd(to_svc, (unsigned char *)&evt, sizeof(em_event_t));
     return 0;
 }
 
@@ -93,10 +95,12 @@ void em_metrics_t::process_msg(unsigned char *data, unsigned int len)
     hdr = (em_raw_hdr_t *)data;
     cmdu = (em_cmdu_t *)(data + sizeof(em_raw_hdr_t));
 
+    //TODO: Test code
+   //handle_assoc_sta_link_metrics_cquery(data, len);
 
     switch (htons(cmdu->type)) {
         case em_msg_type_assoc_sta_link_metrics_query:
-            handle_assoc_sta_link_metrics_query(data, len);
+            handle_assoc_sta_link_metrics_cquery(data, len);
             break;
 
         default:
