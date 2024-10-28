@@ -148,7 +148,7 @@ void em_agent_t::handle_dev_init(em_bus_event_t *evt)
 
 }
 
-void em_agent_t::handle_onewifi_private_subdoc(em_bus_event_t *evt)
+void em_agent_t::handle_m2ctrl_configuration(em_bus_event_t *evt)
 {
     unsigned int num;
     wifi_bus_desc_t *desc;
@@ -160,9 +160,8 @@ void em_agent_t::handle_onewifi_private_subdoc(em_bus_event_t *evt)
 
     if (m_orch->is_cmd_type_in_progress(evt->type) == true) {
         m_agent_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
-    } else if ((num = m_data_model.analyze_onewifi_private_subdoc(evt, desc, &m_bus_hdl)) == 0) {
-        //m_agent_cmd->send_result(em_cmd_out_status_no_change);
-	printf("analyze_onewifi_private_subdoc complete");
+    } else if ((num = m_data_model.analyze_m2ctrl_configuration(evt, desc, &m_bus_hdl)) == 0) {
+	    printf("analyze_onewifi_private_subdoc complete");
     }
 }
 
@@ -278,9 +277,6 @@ void em_agent_t::handle_autoconfig_renew(em_bus_event_t *evt)
     } else if ((num = m_data_model.analyze_autoconfig_renew(evt, pcmd)) == 0) {
         m_agent_cmd->send_result(em_cmd_out_status_no_change);
     } else if (m_orch->submit_commands(pcmd, num) > 0) {
-        m_agent_cmd->send_result(em_cmd_out_status_success);
-    } else {
-        m_agent_cmd->send_result(em_cmd_out_status_not_ready);
     }
 
 }
@@ -315,9 +311,10 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
 	        handle_client_cap_query(evt);
 	        break;
 
-        case em_bus_event_type_onewifi_private_subdoc:
-            handle_onewifi_private_subdoc(evt);
-			break;
+        case em_bus_event_type_m2ctrl_configuration:
+            handle_m2ctrl_configuration(evt);
+            break;
+
         case em_bus_event_type_onewifi_cb:
             handle_onewifi_cb(evt);
             break;
@@ -430,7 +427,6 @@ void em_agent_t::input_listener()
 
     memset(&data, 0, sizeof(raw_data_t));
 
-    //if (desc->bus_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data) != 0) {
     if (desc->bus_data_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data) != 0) {
         printf("%s:%d bus get failed\n", __func__, __LINE__);
         return;
@@ -581,6 +577,7 @@ int em_agent_t::onewifi_cb(char *event_name, raw_data_t *data)
     em_event_t evt;
     em_bus_event_t *bevt;
 
+    printf("%s:%dRecv data from onewifi:\r\n%s\r\n", __func__, __LINE__, (char *)data->raw_data.bytes);
     bevt = &evt.u.bevt;
     bevt->type = em_bus_event_type_onewifi_cb;
     memcpy(bevt->u.raw_buff, data->raw_data.bytes, data->raw_data_len);
@@ -658,28 +655,30 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
     switch (htons(cmdu->type)) {
 		case em_msg_type_autoconf_resp:
 		case em_msg_type_autoconf_renew:
-			if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
+            if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                     len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_freq_band(&band) == false) {
-            	printf("%s:%d: Could not find frequency band\n", __func__, __LINE__);
-            	return NULL;
-        	}
-			
-			em = (em_t *)hash_map_get_first(m_em_map);
-        	while (em != NULL) {
-            	if (em->is_matching_freq_band(&band) == true) {
-                	found = true;
-                	break;
-            	}
-            	em = (em_t *)hash_map_get_next(m_em_map, em);
-        	}  
+                printf("%s:%d: Could not find frequency band\n", __func__, __LINE__);
+                return NULL;
+            }
 
-        	if (found == false) {
-            	printf("%s:%d: Could not find em with matching band%d\n", __func__, __LINE__, band);
-            	return NULL;
-        	}
+            em = (em_t *)hash_map_get_first(m_em_map);
+            while (em != NULL) {
+                if (!(em->is_al_interface_em())) {
+                    if (em->is_matching_freq_band(&band) == true) {
+                        if ((em->get_state() != em_state_agent_autoconfig_renew_pending) && (em->get_state() !=em_state_agent_wsc_m2_pending) && (em->get_state() != em_state_agent_owconfig_pending) ) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }   
+                em = (em_t *)hash_map_get_next(m_em_map, em);
+            }
+            if (found == false) {
+                printf("%s:%d: Could not find em with matching band%d\n", __func__, __LINE__, band);
+                return NULL;
+            }
 
-			break;
-
+            break;
 		case em_msg_type_autoconf_wsc:
 			if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                 len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_radio_id(&ruid) == false) {
@@ -696,6 +695,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 			break;
 
         case em_msg_type_autoconf_search:
+        case em_msg_type_topo_resp:
         case em_msg_type_topo_query:
             em = (em_t *)hash_map_get_first(m_em_map);
 

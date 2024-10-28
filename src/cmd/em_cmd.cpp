@@ -428,11 +428,6 @@ void em_cmd_t::init()
             m_svc = em_service_type_ctrl;
             break;
 
-        case em_cmd_type_onewifi_private_subdoc:
-			strncpy(m_name, "onewifi_priv", strlen("onewifi_priv") + 1);
-			m_svc = em_service_type_agent;
-            break;
-
         case em_cmd_type_max:
             snprintf(m_name, sizeof(m_name), "%s", "max");
             m_svc = em_service_type_none;
@@ -661,14 +656,9 @@ em_cmd_type_t em_cmd_t::bus_2_cmd_type(em_bus_event_type_t etype)
             type = em_cmd_type_em_config;
             break;
 
-        case em_bus_event_type_onewifi_private_subdoc:
-			type = em_cmd_type_onewifi_private_subdoc;
-            break;
-
         case em_bus_event_type_assoc_sta_link_metrics_query:
             type = em_cmd_type_assoc_sta_link_metrics_query;
             break;
-
     }
 
     return type;
@@ -705,10 +695,6 @@ em_bus_event_type_t em_cmd_t::cmd_2_bus_event_type(em_cmd_type_t ctype)
 
         case em_cmd_type_sta_list:
             type = em_bus_event_type_sta_list;
-            break;
-
-        case em_cmd_type_onewifi_private_subdoc:
-			type = em_bus_event_type_onewifi_private_subdoc;
             break;
 
         case em_cmd_type_assoc_sta_link_metrics_query:

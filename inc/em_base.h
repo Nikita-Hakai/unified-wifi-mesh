@@ -1583,7 +1583,7 @@ typedef enum {
     em_state_agent_autoconfig_renew_pending,
     em_state_agent_owconfig_pending,
     em_state_agent_onewifi_bssconfig_ind,
-    em_state_agent_channel_pref_pending,
+    em_state_agent_topo_synchronized,
     em_state_agent_topology_notify,
     em_state_agent_ap_cap_report,
     em_state_agent_client_cap_report,
@@ -1631,7 +1631,6 @@ typedef enum {
     em_cmd_type_client_cap_query,
     em_cmd_type_topo_sync,
     em_cmd_type_em_config,
-    em_cmd_type_onewifi_private_subdoc,
     em_cmd_type_assoc_sta_link_metrics,
     em_cmd_type_assoc_sta_link_metrics_query,
     em_cmd_type_onewifi_cb,
@@ -1898,8 +1897,6 @@ typedef struct {
     bool    r2_disallowed;
     bool    multi_bssid;
     bool    transmitted_bssid;
-    unsigned short int sec_mode;
-	em_long_string_t passphrase;
 } em_bss_info_t;
 
 typedef struct {
@@ -2015,8 +2012,8 @@ typedef enum {
     em_bus_event_type_dm_commit,
     em_bus_event_type_m2_tx,
     em_bus_event_type_topo_sync,
-    em_bus_event_type_onewifi_private_subdoc,
     em_bus_event_type_onewifi_cb,
+    em_bus_event_type_m2ctrl_configuration,
 } em_bus_event_type_t;
 
 typedef struct {
@@ -2117,6 +2114,14 @@ typedef enum {
 	db_cfg_type_1905_security_list_delete = (1 << 17),
 } db_cfg_type_t;
 
+typedef struct{
+    em_long_string_t ssid;
+    unsigned int authtype;
+    em_long_string_t password;
+    mac_address_t mac;
+    unsigned int key_wrap_authenticator;
+}m2ctrl_vapconfig;
+
 typedef struct {
     mac_address_t   al;
     mac_address_t   radio;
@@ -2124,6 +2129,7 @@ typedef struct {
 
 typedef struct {
     mac_address_t   radio;
+    mac_address_t   ctrl_src;
 } em_bus_event_type_cfg_renew_params_t;
 
 typedef struct {
@@ -2207,6 +2213,14 @@ typedef enum {
     em_commit_target_em,
     em_commit_target_agent,
     em_commit_target_sta_hash_map,
+    em_commit_target_radio,
+    em_commit_target_bss,
+} em_commit_target_type_t;
+
+typedef struct {
+    em_commit_target_type_t type;
+    unsigned char params[64];
+    unsigned int params_size;
 } em_commit_target_t;
 
 typedef enum {
