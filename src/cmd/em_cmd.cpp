@@ -438,6 +438,11 @@ void em_cmd_t::init()
             m_svc = em_service_type_ctrl;
             break;
 
+        case em_cmd_type_sta_assoc:
+            strncpy(m_name, "sta_assoc", strlen("sta_assoc") + 1);
+            m_svc = em_service_type_ctrl;
+            break;
+
         case em_cmd_type_em_config:
             strncpy(m_name, "em_config", strlen("em_config") + 1);
             m_svc = em_service_type_ctrl;
@@ -539,7 +544,8 @@ const char *em_cmd_t::get_orch_op_str(dm_orch_type_t type)
         ORCH_TYPE_2S(dm_orch_type_topo_sync)
         ORCH_TYPE_2S(dm_orch_type_channel_pref)
         ORCH_TYPE_2S(dm_orch_type_channel_sel)
-        //ORCH_TYPE_2S(dm_orch_type_assoc_sta_link_metrics_query)
+        ORCH_TYPE_2S(dm_orch_type_channel_cnf)
+        ORCH_TYPE_2S(dm_orch_type_sta_cap)
     }
 
     return "dm_orch_type_unknown";
@@ -573,6 +579,8 @@ const char *em_cmd_t::get_cmd_type_str(em_cmd_type_t type)
         CMD_TYPE_2S(em_cmd_type_client_cap_query)
         CMD_TYPE_2S(em_cmd_type_topo_sync)
         CMD_TYPE_2S(em_cmd_type_em_config)
+        CMD_TYPE_2S(em_cmd_type_sta_assoc)
+        CMD_TYPE_2S(em_cmd_type_channel_pref_query)
         CMD_TYPE_2S(em_cmd_type_assoc_sta_link_metrics_query)
     }
 

@@ -16,30 +16,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DM_STA_H
-#define DM_STA_H
+#ifndef EM_SM_H
+#define EM_SM_H
 
 #include "em_base.h"
 
-class dm_sta_t {
-public:
-    em_sta_info_t    m_sta_info;
+class em_sm_t {
+	
+	em_state_t	m_state;
 
 public:
-    int init() { memset(&m_sta_info, 0, sizeof(em_sta_info_t)); return 0; }
-    em_sta_info_t *get_sta_info() { return &m_sta_info; }
-    int decode(const cJSON *obj, void *parent_id);
-    void encode(cJSON *obj);
+	int set_state(em_state_t state);
+	bool validate_sm(em_state_t state);
+	em_state_t get_state() { return m_state; }
 
-    bool operator == (const dm_sta_t& obj);
-    void operator = (const dm_sta_t& obj);
-
-    static void parse_sta_bss_radio_from_key(const char *key, mac_address_t sta, bssid_t bssid, mac_address_t radio);
-
-    dm_sta_t(em_sta_info_t *sta);
-    dm_sta_t(const dm_sta_t& sta);
-    dm_sta_t();
-    ~dm_sta_t();
+	void init_sm(em_service_type_t service);
+	
+    em_sm_t();
+    ~em_sm_t();
 };
 
 #endif

@@ -66,55 +66,67 @@ void em_t::orch_execute(em_cmd_t *pcmd)
     cmd_type = pcmd->m_type;
     switch (cmd_type) {
         case em_cmd_type_sta_list:
-            m_state = em_state_agent_topology_notify;
-            break;
+            m_sm.set_state(em_state_agent_topology_notify);
+			break;
 
         case em_cmd_type_set_ssid:
-            m_state = em_state_ctrl_misconfigured;
-            break;
+            m_sm.set_state(em_state_ctrl_misconfigured);
+			break;
 
         case em_cmd_type_dev_init:
-            m_state = em_state_agent_config_none;
+			m_sm.set_state(em_state_agent_unconfigured);
             break;
 
         case em_cmd_type_cfg_renew:
-            m_state = (m_service_type == em_service_type_agent) ? 
-							em_state_agent_autoconfig_renew_pending:em_state_ctrl_misconfigured;
-            break;
+            m_sm.set_state((m_service_type == em_service_type_agent) ? 
+							em_state_agent_autoconfig_renew_pending:em_state_ctrl_misconfigured);
+			break;
 
         case em_cmd_type_start_dpp:
             break;
 
         case em_cmd_type_ap_cap_query:
-            m_state = em_state_agent_ap_cap_report;
-            break;
+            m_sm.set_state(em_state_agent_ap_cap_report);
+			break;
 
         case em_cmd_type_client_cap_query:
-            m_state = em_state_agent_client_cap_report;
+			m_sm.set_state(em_state_agent_client_cap_report);
             break;
 
         case em_cmd_type_em_config:
             printf("%s:%d: %s(%s) state: 0x%04x\n", __func__, __LINE__,
                     em_cmd_t::get_orch_op_str(pcmd->get_orch_op()), em_cmd_t::get_cmd_type_str(pcmd->m_type), get_state());
-			if ((pcmd->get_orch_op() == dm_orch_type_topo_sync) && (m_state == em_state_ctrl_wsc_m2_sent)) {
-            	m_state = em_state_ctrl_topo_sync_pending;
-			} else if ((pcmd->get_orch_op() == dm_orch_type_channel_pref) && (m_state == em_state_ctrl_topo_synchronized)) {
-            	m_state = em_state_ctrl_channel_query_pending;
-			} else if ((pcmd->get_orch_op() == dm_orch_type_channel_sel) && (m_state == em_state_ctrl_channel_queried)) {
-            	m_state = em_state_ctrl_channel_select_pending;
-			}
+            if ((pcmd->get_orch_op() == dm_orch_type_topo_sync) && (m_sm.get_state() == em_state_ctrl_wsc_m2_sent)) {
+                m_sm.set_state(em_state_ctrl_topo_sync_pending);
+            } else if ((pcmd->get_orch_op() == dm_orch_type_channel_pref) && (m_sm.get_state() == em_state_ctrl_topo_synchronized)) {
+                m_sm.set_state(em_state_ctrl_channel_query_pending);
+            } else if ((pcmd->get_orch_op() == dm_orch_type_channel_sel) && (m_sm.get_state() == em_state_ctrl_channel_queried)) {
+                set_state(em_state_ctrl_channel_select_pending);
+            } else if ((pcmd->get_orch_op() == dm_orch_type_channel_cnf) && (m_sm.get_state() == em_state_ctrl_channel_selected)) {
+                set_state(em_state_ctrl_channel_cnf_pending);
+            }
             break;
 
         case em_cmd_type_dev_test:
-			m_state = em_state_ctrl_channel_query_pending;
+            m_sm.set_state(em_state_ctrl_channel_query_pending);
+            break;
+        case em_cmd_type_onewifi_cb:
+            m_sm.set_state(em_state_agent_onewifi_bssconfig_ind);
+            break;
+        case em_cmd_type_sta_assoc:
+            m_sm.set_state(em_state_ctrl_sta_cap_pending);
+            break;
+		
+		case em_cmd_type_channel_pref_query:
+			m_sm.set_state(em_state_agent_channel_pref_query);
+			break;
+		
+		case em_cmd_type_channel_sel_resp:
+			m_sm.set_state(em_state_agent_channel_sel_resp);
 			break;
 
         case em_cmd_type_assoc_sta_link_metrics:
             //m_state = em_state_agent_assoc_sta_link_metrics;
-            break;
-
-        case em_cmd_type_onewifi_cb:
-            m_state = em_state_agent_onewifi_bssconfig_ind;
             break;
     }
 }
@@ -174,6 +186,7 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_autoconf_renew:
         case em_msg_type_topo_resp:
         case em_msg_type_topo_query:
+        case em_msg_type_topo_notif:
             em_configuration_t::process_msg(data, len);
             
             //TODO: Test code, remove later
@@ -194,6 +207,7 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
 
         case em_msg_type_ap_cap_query:
         case em_msg_type_client_cap_query:
+        case em_msg_type_client_cap_rprt:
             em_capability_t::process_msg(data, len);
             break;
 
@@ -203,6 +217,9 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
 
         case em_msg_type_channel_pref_query:
         case em_msg_type_channel_pref_rprt:
+        case em_msg_type_channel_sel_req:
+        case em_msg_type_channel_sel_rsp:
+        case em_msg_type_op_channel_rprt:
             em_channel_t::process_msg(data, len);
             break;
 
@@ -227,30 +244,33 @@ void em_t::handle_agent_state()
     cmd_type = m_cmd->m_type;
     switch (cmd_type) {
         case em_cmd_type_dev_init:
-        case em_cmd_type_sta_list:
         case em_cmd_type_cfg_renew:
-            if ((m_state >= em_state_agent_config_none) && (m_state < em_state_agent_config_complete)) {
-                em_configuration_t::process_agent_state();
+            if ((m_sm.get_state() >= em_state_agent_unconfigured) && (m_sm.get_state() < em_state_agent_configured)) {
+				em_configuration_t::process_agent_state();
             }
             break;
 
+        case em_cmd_type_sta_list:
+            em_configuration_t::process_agent_state();
+            break;
+
         case em_cmd_type_start_dpp:
-            if ((m_state >= em_state_agent_prov_none) && (m_state < em_state_agent_prov_complete)) {
-                em_provisioning_t::process_agent_state();
+            if ((m_sm.get_state() >= em_state_agent_unconfigured) && (m_sm.get_state() < em_state_agent_configured)) {
+				em_provisioning_t::process_agent_state();
             }
             break;
         case em_cmd_type_ap_cap_query:
         case em_cmd_type_client_cap_query:
-            if ((m_state >= em_state_agent_config_none) && (m_state < em_state_agent_config_complete)) {
+			if ((m_sm.get_state() >= em_state_agent_configured)) {
                 em_capability_t::process_state();
             }
             break;
-
+        case em_cmd_type_channel_pref_query:
+		case em_cmd_type_channel_sel_resp:
+                em_channel_t::process_state();
+            break;
         case em_cmd_type_assoc_sta_link_metrics:
             em_metrics_t::process_state();
-
-            break;
-
         default:
             break;
     }
@@ -281,10 +301,13 @@ void em_t::handle_ctrl_state()
             break;
 
         case em_cmd_type_dev_test:
-			em_channel_t::process_ctrl_state();
-			break;
-    }
+            em_channel_t::process_ctrl_state();
+            break;
 
+        case em_cmd_type_sta_assoc:
+            em_capability_t::process_state();
+            break;
+    }
 }
 
 void em_t::proto_timeout()
@@ -484,32 +507,48 @@ em_event_t *em_t::pop_from_queue()
     return (em_event_t *)queue_pop(m_iq.queue);
 }
 
-short em_t::create_ap_radio_basic_cap(unsigned char *buff)
-{
-    short len = 0;
-    em_ap_radio_basic_cap_t *cap = (em_ap_radio_basic_cap_t *)buff;
-    memcpy(&cap->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
-    len += sizeof(mac_address_t);
+short em_t::create_ap_radio_basic_cap(unsigned char *buff) {
+	short len = 0;
+	em_ap_radio_basic_cap_t *cap = (em_ap_radio_basic_cap_t *)buff;
+	em_channels_list_t *channel_list;
+	em_op_class_t *op_class;
+	unsigned int all_channel_len = 0;
+	len = sizeof(em_ap_radio_basic_cap_t);
 
-    em_interface_t* radio_interface = get_radio_interface();
-    rdk_wifi_radio_t* radio_data = get_current_cmd()->get_radio_data(radio_interface);
-    if (radio_data != NULL)
-        cap->num_bss = radio_data->vaps.num_vaps;
-    cap->num_bss = 1;
+	memcpy(&cap->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 
-    len += 1;
-    cap->op_class_num= 1;
-    len += 1;
+	em_interface_t* radio_interface = get_radio_interface();
+	cap->num_bss = get_current_cmd()->get_data_model()->get_num_bss();
+	cap->op_class_num = 0;
+	op_class = cap->op_classes;
+	for (int i = 0; i < get_current_cmd()->get_data_model()->get_num_op_class(); i++) {
 
-    cap->op_classes[0].op_class = get_current_cmd()->get_rd_op_class();
-    len += 1;
-    cap->op_classes[0].channels.num = 1;
-    len += 1;
-    cap->op_classes[0].channels.channel[0] = get_current_cmd()->get_rd_channel();
-    len += 2;
+		em_op_class_info_t *op_class_info = get_current_cmd()->get_data_model()->get_op_class_info(i);
+		if ((op_class_info != NULL) && (op_class_info->id.type == em_op_class_type_capability)){
+			cap->op_class_num++;
+			op_class->op_class = op_class_info->op_class;
+			op_class->max_tx_eirp = op_class_info->max_tx_power;
+			op_class->num = op_class_info->num_non_op_channels;
+			len += sizeof(em_op_class_t);
+			if (op_class_info->num_non_op_channels != 0) {
+				channel_list = &op_class->channels;
+				for (int j = 0; j < op_class_info->num_non_op_channels; j++) {
+					memcpy( (unsigned char *)&channel_list->channel, (unsigned char *)&op_class_info->non_op_channel[j], sizeof(unsigned char));
+					all_channel_len = all_channel_len + sizeof(unsigned char);
+					channel_list = (em_channels_list_t *)((unsigned char *)channel_list + sizeof(em_channels_list_t) + sizeof(unsigned char) );
+									   len += sizeof(unsigned char);
+				}
+			}
+			printf("Op Class %d: %d, max_tx_eirp: %d, channels.num: %d\n",
+				   i, op_class_info->op_class, op_class_info->max_tx_power, op_class_info->num_non_op_channels);
+			printf(" cap->op_classes[%d].op_class: %d, cap->op_classes[%d].max_tx_eirp %d,	cap->op_classes[%d].channels.num %d\n",
+				   i, cap->op_classes[i].op_class, i, cap->op_classes[i].max_tx_eirp, i, cap->op_classes[i].num);
 
-
-    return len;
+		}
+		op_class = (em_op_class_t *)((unsigned char *)op_class + sizeof(em_op_class_t) + all_channel_len);
+		all_channel_len = 0;
+	}
+	return len;
 }
 
 short em_t::create_ap_cap_tlv(unsigned char *buff)
@@ -740,8 +779,12 @@ const char *em_t::state_2_str(em_state_t state)
 		EM_STATE_2S(em_state_ctrl_channel_select_pending)
 		EM_STATE_2S(em_state_ctrl_channel_selected)
 		EM_STATE_2S(em_state_ctrl_channel_report_pending)
+		EM_STATE_2S(em_state_ctrl_channel_cnf_pending)
+		EM_STATE_2S(em_state_ctrl_channel_confirmed)
 		EM_STATE_2S(em_state_ctrl_configured)
 		EM_STATE_2S(em_state_ctrl_misconfigured)
+		EM_STATE_2S(em_state_ctrl_sta_cap_pending)
+		EM_STATE_2S(em_state_ctrl_sta_cap_confirmed)
     }
 
     return "em_state_unknown";
@@ -765,8 +808,8 @@ em_t::em_t(em_interface_t *ruid, em_freq_band_t band, dm_easy_mesh_t *dm, em_pro
     m_band = band;  
     m_service_type = type;
     m_profile_type = profile;
-    m_state = (type == em_service_type_agent) ? em_state_agent_config_none:em_state_ctrl_unconfigured;
-    m_orch_state = em_orch_state_idle;
+    m_sm.init_sm(type);
+	m_orch_state = em_orch_state_idle;
     m_cmd = NULL;
     RAND_bytes(get_crypto_info()->e_nonce, sizeof(em_nonce_t));
     RAND_bytes(get_crypto_info()->r_nonce, sizeof(em_nonce_t));

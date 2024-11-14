@@ -16,30 +16,41 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DM_STA_H
-#define DM_STA_H
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <errno.h>
+#include <assert.h>
+#include "em_sm.h"
 
-#include "em_base.h"
 
-class dm_sta_t {
-public:
-    em_sta_info_t    m_sta_info;
+bool em_sm_t::validate_sm(em_state_t state)
+{
+	return true;
+}
 
-public:
-    int init() { memset(&m_sta_info, 0, sizeof(em_sta_info_t)); return 0; }
-    em_sta_info_t *get_sta_info() { return &m_sta_info; }
-    int decode(const cJSON *obj, void *parent_id);
-    void encode(cJSON *obj);
+int em_sm_t::set_state(em_state_t state)
+{
+	if (validate_sm(state) == true) {
+		m_state = state;
+		return 0;
+	}
 
-    bool operator == (const dm_sta_t& obj);
-    void operator = (const dm_sta_t& obj);
+	return -1;
+}
 
-    static void parse_sta_bss_radio_from_key(const char *key, mac_address_t sta, bssid_t bssid, mac_address_t radio);
+void em_sm_t::init_sm(em_service_type_t service)
+{
+	m_state = (service == em_service_type_agent) ? em_state_agent_unconfigured:em_state_ctrl_unconfigured;	
+}
 
-    dm_sta_t(em_sta_info_t *sta);
-    dm_sta_t(const dm_sta_t& sta);
-    dm_sta_t();
-    ~dm_sta_t();
-};
+em_sm_t::em_sm_t()
+{
 
-#endif
+}
+
+em_sm_t::~em_sm_t()
+{
+
+}

@@ -16,30 +16,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef DM_STA_H
-#define DM_STA_H
+#ifndef EM_CMD_CHANNEL_PREF_QUERY_H
+#define EM_CMD_CHANNEL_PREF_QUERY_H
 
-#include "em_base.h"
+#include "em_cmd.h"
 
-class dm_sta_t {
-public:
-    em_sta_info_t    m_sta_info;
+class em_cmd_channel_pref_query_t : public em_cmd_t {
 
 public:
-    int init() { memset(&m_sta_info, 0, sizeof(em_sta_info_t)); return 0; }
-    em_sta_info_t *get_sta_info() { return &m_sta_info; }
-    int decode(const cJSON *obj, void *parent_id);
-    void encode(cJSON *obj);
-
-    bool operator == (const dm_sta_t& obj);
-    void operator = (const dm_sta_t& obj);
-
-    static void parse_sta_bss_radio_from_key(const char *key, mac_address_t sta, bssid_t bssid, mac_address_t radio);
-
-    dm_sta_t(em_sta_info_t *sta);
-    dm_sta_t(const dm_sta_t& sta);
-    dm_sta_t();
-    ~dm_sta_t();
+    em_cmd_channel_pref_query_t(em_service_type_t service, em_cmd_params_t param, dm_easy_mesh_t& dm);
 };
 
 #endif

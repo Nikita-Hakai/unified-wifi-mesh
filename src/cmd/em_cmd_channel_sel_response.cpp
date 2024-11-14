@@ -1,3 +1,4 @@
+
 /**
  * Copyright 2023 Comcast Cable Communications Management, LLC
  *
@@ -38,30 +39,28 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <cjson/cJSON.h>
-#include "em_cmd_sta_list.h"
+#include "em_cmd_channel_sel_response.h"
 
-em_cmd_sta_list_t::em_cmd_sta_list_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+em_cmd_channel_sel_resp_t::em_cmd_channel_sel_resp_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
 {
     em_cmd_ctx_t ctx;;
 
-    m_type = em_cmd_type_sta_list;
+    m_type = em_cmd_type_channel_sel_resp;
     memcpy(&m_param, &param, sizeof(em_cmd_params_t));
 
     memset((unsigned char *)&m_orch_desc[0], 0, EM_MAX_CMD*sizeof(em_orch_desc_t));
 
     m_orch_op_idx = 0;
-    m_num_orch_desc = 2;
-    m_orch_desc[0].op = dm_orch_type_ctrl_notify;
+    m_num_orch_desc = 1;
+    m_orch_desc[0].op = dm_orch_type_channel_sel_resp;
     m_orch_desc[0].submit = true;
-    m_orch_desc[1].op = dm_orch_type_sta_aggregate;
 
-    strncpy(m_name, "sta_list", strlen("sta_list") + 1);
+    snprintf(m_name, sizeof(m_name), "%s", "channel_response");
     m_svc = em_service_type_agent;
     init(&dm);
 
     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
-    ctx.type = m_orch_desc[0].op;    
-
+    ctx.type = m_orch_desc[0].op;
     m_data_model.set_cmd_ctx(&ctx);
 }
 

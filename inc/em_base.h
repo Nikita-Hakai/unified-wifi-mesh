@@ -40,6 +40,7 @@
 #define EM_CTRL_CAP_SZ  8
 #define MIN_MAC_LEN 12
 #define MAX_EM_BUFF_SZ  1024
+#define EM_MAX_FRAME_BODY_LEN	512
 
 #define EM_TEST_IO_PERM 0666
 #define EM_IO_BUFF_SZ   4096
@@ -65,10 +66,11 @@
 #define EM_MAX_NON_OP_CHANNELS  16
 #define EM_MAX_CMD_TTL  10
 #define EM_MAX_RENEW_TX_THRESH  5
+#define EM_MAX_CAP_QUERY_TX_THRESH  2
 #define EM_MAX_TOPO_QUERY_TX_THRESH  5
 
 
-#define EM_CLI_AMX_ARGS 5
+#define EM_CLI_MAX_ARGS 5
 
 /* Authentication Type Flags */
 #define EM_AUTH_OPEN 0x0001
@@ -185,7 +187,7 @@ typedef char    em_tiny_string_t[4];
 typedef char    em_subdoc_name_space_t[64];
 typedef char    em_subdoc_data_buff_t[EM_SUBDOC_BUFF_SZ];
 typedef char    em_status_string_t[EM_IO_BUFF_SZ];
-typedef char    em_raw_data_t[EM_SUBDOC_BUFF_SZ];
+typedef unsigned char    em_raw_data_t[EM_SUBDOC_BUFF_SZ];
 
 typedef struct {
     unsigned char   dsap;
@@ -240,7 +242,7 @@ typedef struct {
     mac_address_t   bssid;
     unsigned char   reserved_field:7;
     unsigned char   assoc_event:1;
-} __attribute__((__packed__)) em_tlv_client_assoc_t;
+} __attribute__((__packed__)) em_client_assoc_event_t;
 
 typedef unsigned char em_enum_type_t;
 
@@ -273,13 +275,13 @@ typedef struct {
 } __attribute__((__packed__)) em_chirp_t;
 
 typedef struct {
-    unsigned char   num;
     unsigned char   channel[0];
 } __attribute__((__packed__)) em_channels_list_t;
 
 typedef struct {
     unsigned char   op_class;
     unsigned char   max_tx_eirp;
+	unsigned char   num;
     em_channels_list_t  channels;
 } __attribute__((__packed__)) em_op_class_t;
 
@@ -885,6 +887,7 @@ typedef struct {
 
 typedef struct {
     unsigned char op_class;
+	unsigned char   num;
     em_channels_list_t channels;
 } __attribute__((__packed__)) em_channel_pref_op_class_t;
 
@@ -1560,34 +1563,23 @@ typedef enum {
 } data_elem_attr_id_t;
 
 typedef enum {
-    em_state_agent_none,
-    em_state_agent_prov_none,
-    em_state_agent_prov,
-    em_state_agent_auth_req_pending,
-    em_state_agent_auth_rsp_pending,
-    em_state_agent_auth_cnf_pending,
-    em_state_agent_config_req_pending,
-    em_state_agent_config_rsp_pending,
-    em_state_agent_config_res_pending,
-    em_state_agent_prov_complete,   // idle state after provisioned
-    em_state_agent_discover_none,
-    em_state_agent_discover_pending,
-    em_state_agent_topo_query_pending,
-    em_state_agent_topo_rsp_pending,
-    em_state_agent_topo_rsp_recvd,
-    em_state_agent_discover_max,
-    em_state_agent_config_none,     // idle state after provisioned, but does not have configuration for M1/M2
-    em_state_agent_config_pending,
+    em_state_agent_unconfigured,
     em_state_agent_autoconfig_rsp_pending,
     em_state_agent_wsc_m2_pending,
-    em_state_agent_autoconfig_renew_pending,
     em_state_agent_owconfig_pending,
     em_state_agent_onewifi_bssconfig_ind,
+	em_state_agent_autoconfig_renew_pending,
     em_state_agent_topo_synchronized,
+	em_state_agent_channel_selection_pending,
+    em_state_agent_channel_report_pending,
+    em_state_agent_configured,
+	
+	// Transient agent stats
     em_state_agent_topology_notify,
     em_state_agent_ap_cap_report,
     em_state_agent_client_cap_report,
-    em_state_agent_config_complete, // idle state after configured, should return to this state
+    em_state_agent_channel_pref_query,
+	em_state_agent_channel_sel_resp,
     em_state_agent_assoc_sta_link_metrics,
 
     em_state_ctrl_unconfigured = 0x100,
@@ -1599,9 +1591,13 @@ typedef enum {
     em_state_ctrl_channel_queried,
 	em_state_ctrl_channel_select_pending,
     em_state_ctrl_channel_selected,
-	em_state_ctrl_channel_report_pending,
+    em_state_ctrl_channel_cnf_pending,
+    em_state_ctrl_channel_confirmed,
+    em_state_ctrl_channel_report_pending,
     em_state_ctrl_configured,
     em_state_ctrl_misconfigured,
+    em_state_ctrl_sta_cap_pending,
+    em_state_ctrl_sta_cap_confirmed,
 
     em_state_max,
 } em_state_t;
@@ -1634,6 +1630,9 @@ typedef enum {
     em_cmd_type_assoc_sta_link_metrics,
     em_cmd_type_assoc_sta_link_metrics_query,
     em_cmd_type_onewifi_cb,
+    em_cmd_type_sta_assoc,
+    em_cmd_type_channel_pref_query,
+	em_cmd_type_channel_sel_resp,
     em_cmd_type_max,
 } em_cmd_type_t;
 
@@ -1838,6 +1837,7 @@ typedef struct {
     mac_address_t   id;
     mac_address_t   bssid;
     mac_address_t radiomac;
+    bool associated;
     unsigned int    last_ul_rate;
     em_long_string_t    timestamp;
     unsigned int    last_dl_rate;
@@ -1854,20 +1854,22 @@ typedef struct {
     unsigned int    bytes_rx;
     unsigned int    errors_tx;
     unsigned int    errors_rx;
+    unsigned int 	frame_body_len;
+    unsigned char	frame_body[EM_MAX_FRAME_BODY_LEN];
+
     em_long_string_t    cap;
     em_long_string_t    ht_cap;
     em_long_string_t    vht_cap;
     em_long_string_t    he_cap;
     em_long_string_t    wifi6_cap;
     em_long_string_t    cellular_data_pref;
-    unsigned int    reassoc_delay;
-    em_long_string_t    sec_association;
-    em_short_string_t    sleep_mode;
-    wifi_security_key_type_t    sec_cap;
-    em_long_string_t m_sta_key;
-    unsigned int assoc_frame_body_len;
-    em_subdoc_data_buff_t assoc_frame_body;
 } em_sta_info_t;
+
+typedef enum {
+    em_target_sta_map_assoc,
+    em_target_sta_map_disassoc,
+    em_target_sta_map_consolidated,
+} em_target_sta_map_t;
 
 typedef struct {
     em_interface_t  bssid;
@@ -2012,8 +2014,12 @@ typedef enum {
     em_bus_event_type_dm_commit,
     em_bus_event_type_m2_tx,
     em_bus_event_type_topo_sync,
-    em_bus_event_type_onewifi_cb,
+    em_bus_event_type_onewifi_private_cb,
+    em_bus_event_type_onewifi_radio_cb,
     em_bus_event_type_m2ctrl_configuration,
+	em_bus_event_type_sta_assoc,
+	em_bus_event_type_channel_pref_query,
+	em_bus_event_type_channel_sel_req,
 } em_bus_event_type_t;
 
 typedef struct {
@@ -2049,6 +2055,7 @@ typedef enum {
     dm_orch_type_ssid_delete,
     dm_orch_type_sta_insert,
     dm_orch_type_sta_update,
+    dm_orch_type_sta_aggregate,
     dm_orch_type_sta_delete,
     dm_orch_type_sec_insert,
     dm_orch_type_sec_update,
@@ -2085,6 +2092,9 @@ typedef enum {
     dm_orch_type_topo_sync,
     dm_orch_type_channel_pref,
     dm_orch_type_channel_sel,
+    dm_orch_type_channel_cnf,
+    dm_orch_type_sta_cap,
+	dm_orch_type_channel_sel_resp,
 } dm_orch_type_t;
 
 typedef struct {
@@ -2120,12 +2130,23 @@ typedef struct{
     em_long_string_t password;
     mac_address_t mac;
     unsigned int key_wrap_authenticator;
+    bool enable;
 }m2ctrl_vapconfig;
+
+typedef struct{
+    unsigned int num;
+    em_op_class_info_t op_class_info[EM_MAX_OP_CLASS];
+}op_class_channel_sel;
 
 typedef struct {
     mac_address_t   al;
     mac_address_t   radio;
 } em_bus_event_type_m2_tx_params_t;
+
+typedef struct {
+    mac_address_t   dev;
+    em_client_assoc_event_t   assoc;
+} em_bus_event_type_client_assoc_params_t;
 
 typedef struct {
     mac_address_t   radio;
@@ -2134,7 +2155,7 @@ typedef struct {
 
 typedef struct {
     unsigned int num_args;
-    em_long_string_t args[EM_CLI_AMX_ARGS];
+    em_long_string_t args[EM_CLI_MAX_ARGS];
     em_long_string_t fixed_args;
 } em_cmd_params_t;
 
@@ -2174,6 +2195,9 @@ typedef em_long_string_t db_column_name_t;
 typedef enum {
     db_data_type_char,
     db_data_type_varchar,
+    db_data_type_binary,
+    db_data_type_varbinary,
+    db_data_type_text,
     db_data_type_integer,
     db_data_type_int,
     db_data_type_smallint,

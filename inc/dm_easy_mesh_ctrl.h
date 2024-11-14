@@ -35,6 +35,7 @@
 
 class em_cmd_t;
 class dm_easy_mesh_t;
+class em_mgr_t;
 
 class dm_easy_mesh_ctrl_t :
 
@@ -55,7 +56,7 @@ class dm_easy_mesh_ctrl_t :
     int set_radio_cap_list(cJSON *radio_cap_list_obj, mac_address_t *radio_mac);
 
 public:
-    int init(const char *data_model_path);
+    int init(const char *data_model_path, em_mgr_t *mgr);
 
     bool    is_initialized() { return m_initialized; }
     void	set_initialized() { m_initialized = true; }
@@ -68,7 +69,9 @@ public:
     int analyze_reset(em_bus_event_t *evt, em_cmd_t *cmd[]);
     int analyze_remove_device(em_bus_event_t *evt, em_cmd_t *cmd[]);
     int analyze_m2_tx(em_bus_event_t *evt, em_cmd_t *cmd[]);
-    int analyze_config_renew(em_bus_event_t *evt, em_cmd_t *cmd[]);
+    int analyze_sta_assoc_event(em_bus_event_t *evt, em_cmd_t *cmd[]);
+    int analyze_client_assoc(em_bus_event_t *evt, em_cmd_t *cmd[]);
+	int analyze_config_renew(em_bus_event_t *evt, em_cmd_t *cmd[]);
     int analyze_dev_test(em_bus_event_t *evt, em_cmd_t *cmd[]);
     int analyze_radio_metrics_req(em_cmd_t *cmd[]);
     int analyze_ap_metrics_req(em_cmd_t *cmd[]);

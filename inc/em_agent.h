@@ -26,7 +26,6 @@
 #include "em_crypto.h"
 #include "em_orch_agent.h"
 #include "bus.h"
-#include "bus_common.h"
 
 class em_cmd_agent_t;
 
@@ -70,7 +69,11 @@ public:
     void handle_assoc_sta_link_metrics(em_bus_event_t *evt);
     void handle_assoc_sta_link_metrics_query(em_bus_event_t *evt);
     void handle_onewifi_cb(em_bus_event_t *evt);
+	void handle_onewifi_private_cb(em_bus_event_t *evt);
+	void handle_onewifi_radio_cb(em_bus_event_t *evt);
     void handle_m2ctrl_configuration(em_bus_event_t *evt);
+    void handle_channel_pref_query(em_bus_event_t *evt);
+    void handle_channel_sel_req(em_bus_event_t *evt);
 
     em_cmd_t& get_command(char *in);
     
@@ -88,7 +91,6 @@ public:
     static int sta_cb(char *event_name, raw_data_t *data);
     static int assoc_stats_cb(char *event_name, raw_data_t *data);
     static int onewifi_cb(char *event_name, raw_data_t *data);
-
     void *get_assoc(void*);
     void io(void *data, bool input = true);
     bool agent_input(void *data);

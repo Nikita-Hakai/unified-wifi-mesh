@@ -32,6 +32,9 @@ char *db_easy_mesh_t::get_column_format(db_fmt_t fmt, unsigned int pos)
     switch (m_columns[pos].m_type) {
         case db_data_type_char:
         case db_data_type_varchar:
+        case db_data_type_binary:
+        case db_data_type_varbinary:
+        case db_data_type_text:
             snprintf(fmt, sizeof(fmt), "%s", "'%s', ");
             break;
 
@@ -71,6 +74,10 @@ int db_easy_mesh_t::get_strings_by_token(char *parent, int token, unsigned int a
     unsigned int num = 0, i;
     em_long_string_t str_copy;
     char *tmp, *orig;
+
+	if (*parent == 0) {
+		return 0;
+	}
 
     for (i = 0; i < argc; i++) {
         memset(argv[i], 0, sizeof(em_long_string_t));
@@ -160,6 +167,8 @@ int db_easy_mesh_t::update_row(db_client_t& db_client, ...)
     (void) vsnprintf(query, sizeof(db_query_t), format, list);
     va_end(list);
 
+    //printf("%s:%d: Query: %s\n", __func__, __LINE__, query);
+
     ctx = db_client.execute(query);
     while (db_client.next_result(ctx) == true);
 
@@ -183,6 +192,8 @@ int db_easy_mesh_t::delete_row(db_client_t& db_client, ...)
     va_start(list, format);
     (void) vsnprintf(query, sizeof(db_query_t), format, list);
     va_end(list);
+
+    //printf("%s:%d: Query: %s\n", __func__, __LINE__, query);
 
     ctx = db_client.execute(query);
     while (db_client.next_result(ctx) == true);
@@ -253,6 +264,18 @@ int db_easy_mesh_t::create_table(db_client_t& db_client)
                 snprintf(type_str, sizeof(type_str), "varchar(%d)", m_columns[i].m_type_args);
                 break;
 
+            case db_data_type_binary:
+                snprintf(type_str, sizeof(type_str), "binary(%d)", m_columns[i].m_type_args);
+                break;
+
+            case db_data_type_varbinary:
+                snprintf(type_str, sizeof(type_str), "varbinary(%d)", m_columns[i].m_type_args);
+                break;
+
+            case db_data_type_text:
+                snprintf(type_str, sizeof(type_str), "text(%d)", m_columns[i].m_type_args);
+                break;
+
             case db_data_type_integer:
                 snprintf(type_str, sizeof(type_str), "integer");
                 break;
@@ -288,6 +311,7 @@ int db_easy_mesh_t::create_table(db_client_t& db_client)
     query[strlen(query) - 2] = ')';
     query[strlen(query) - 1] = 0;
 
+    //printf("%s:%d: Query: %s\n", __func__, __LINE__, query);
     ctx = db_client.execute(query);
 
     return 0;
