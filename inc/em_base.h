@@ -45,10 +45,10 @@ extern "C"
 #define EM_MAX_E4_TABLE_CHANNEL 32
 
 #define EM_PROTO_TOUT   1
-#define EM_MGR_TOUT     1
+#define EM_MGR_TOUT     0.5
 #define EM_METRICS_REQ_MULT 5
-#define EM_2_TOUT_MULT 	2
-#define EM_5_TOUT_MULT 	5
+#define EM_2_TOUT_MULT 	4
+#define EM_5_TOUT_MULT 	10
 #define EM_CTRL_CAP_SZ  8
 #define MIN_MAC_LEN 12
 #define MAX_EM_BUFF_SZ  1024
@@ -57,6 +57,7 @@ extern "C"
 
 #define EM_TEST_IO_PERM 0666
 #define EM_IO_BUFF_SZ   4096
+#define EM_LONG_IO_BUFF_SZ   4096*4
 
 #define EM_MAX_OP_CLASS    48
 #define EM_MAX_POLICIES	16	
@@ -289,13 +290,6 @@ typedef enum {
     em_freq_band_60,
     em_freq_band_unknown
 } em_freq_band_t;
-
-typedef enum {
-    em_rd_freq_band_unknown,    //rf band based on Wi-Fi Simple Configuration Technical Specification v2 table 44
-    em_rd_freq_band_24,
-    em_rd_freq_band_5,
-    em_rd_freq_band_60 = 0x4,
-} em_rd_freq_band_t;
 
 typedef struct {
     unsigned int    bit_map;
@@ -1773,6 +1767,8 @@ typedef enum {
     em_state_ctrl_steer_btm_req_ack_rcvd,
     em_state_ctrl_sta_disassoc_pending,
     em_state_ctrl_set_policy_pending,
+    em_state_ctrl_ap_mld_config_pending,
+    em_state_ctrl_ap_mld_configured,
 
     em_state_max,
 } em_state_t;
@@ -2025,6 +2021,7 @@ typedef struct {
     unsigned int 	frame_body_len;
     unsigned char	frame_body[EM_MAX_FRAME_BODY_LEN];
     unsigned int    num_vendor_infos;
+    bool            multi_band_cap;
 
     em_long_string_t    cap;
     em_long_string_t    ht_cap;
@@ -2080,6 +2077,7 @@ typedef struct {
     bool    r2_disallowed;
     bool    multi_bssid;
     bool    transmitted_bssid;
+    em_eht_operations_bss_t eht_ops;
 } em_bss_info_t;
 
 typedef struct {
@@ -2540,6 +2538,8 @@ typedef struct{
     unsigned int num;
     em_op_class_info_t op_class_info[EM_MAX_OP_CLASS];
 	em_tx_power_limit_t tx_power;
+    em_spatial_reuse_req_t spatial_reuse_req;
+    em_eht_operations_t eht_ops;
 	em_freq_band_t freq_band;
 }op_class_channel_sel;
 
@@ -2827,8 +2827,16 @@ typedef enum {
     em_network_node_data_type_raw,
 } em_network_node_data_type_t;
 
+typedef struct {
+    bool collapsed;
+    unsigned int orig_node_ctr;
+    unsigned int node_ctr;
+    unsigned int node_pos;
+} em_node_display_info_t;
+
 typedef struct em_network_node {
     em_long_string_t   key;
+    em_node_display_info_t	display_info;
     em_network_node_data_type_t type;
     em_long_string_t    value_str;
     unsigned int        value_int;
@@ -2836,8 +2844,7 @@ typedef struct em_network_node {
     struct em_network_node     *child[EM_MAX_DM_CHILDREN];
 } em_network_node_t;
 
-typedef int (* em_editor_callback_t)(em_network_node_t *);
-
+typedef em_network_node_t *(* em_editor_callback_t)(em_network_node_t *, void *);
 #ifdef __cplusplus
 }
 #endif

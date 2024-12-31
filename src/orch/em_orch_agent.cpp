@@ -153,7 +153,7 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
     em_long_string_t key;
     mac_addr_str_t sta_mac_str, bss_mac_str, radio_mac_str;
     mac_address_t   radio_mac;
-    em_freq_band_t band, freq_band;
+    em_freq_band_t band;
 
     ctx = pcmd->m_data_model.get_cmd_ctx();
 
@@ -188,9 +188,8 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
                 config.type = em_commit_target_bss;
                 dm->commit_config(pcmd->m_data_model, config);
                 band =  pcmd->get_radio(i)->get_radio_info()->band;
-                freq_band = em_t::convert_freq_band(band);
-                printf("%s:%d: calling create_node freq_band=%d\n", __func__, __LINE__, freq_band);
-                if ((em = m_mgr->create_node(intf, freq_band, dm, 0, em_profile_type_3, em_service_type_agent)) == NULL) {
+                printf("%s:%d: calling create_node band=%d\n", __func__, __LINE__, band);
+                if ((em = m_mgr->create_node(intf, band, dm, 0, em_profile_type_3, em_service_type_agent)) == NULL) {
                     printf("%s:%d: Failed to create node\n", __func__, __LINE__);
             
                 }
@@ -270,6 +269,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
     dm_sta_t *sta;
 
     ctx = pcmd->m_data_model.get_cmd_ctx();
+	pthread_mutex_lock(&m_mgr->m_mutex);
     em = (em_t *)hash_map_get_first(m_mgr->m_em_map);	
     while (em != NULL) {
         switch (pcmd->m_type) {
@@ -327,7 +327,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
                 break;
             case em_cmd_type_onewifi_cb:
 				if (!(em->is_al_interface_em())) {
-                    if (memcmp(pcmd->get_data_model()->m_radio[0].m_radio_info.id.mac, em->get_radio_interface_mac(), sizeof(mac_address_t)) == 0) {
+                    if (memcmp(pcmd->get_data_model()->get_bss(0)->get_bss_info()->ruid.mac, em->get_radio_interface_mac(), sizeof(mac_address_t)) == 0) {
                         if (em->get_state() == em_state_agent_owconfig_pending) {
                         	printf("em candidates created for em_cmd_type_onewifi_cb\n");
                         	queue_push(pcmd->m_em_candidates, em);
@@ -386,7 +386,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
         }
         em = (em_t *)hash_map_get_next(m_mgr->m_em_map, em);	
     }
-
+	pthread_mutex_unlock(&m_mgr->m_mutex);
     return count;
 }
 
