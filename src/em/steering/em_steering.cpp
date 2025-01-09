@@ -149,6 +149,80 @@ int em_steering_t::send_client_assoc_ctrl_req_msg(em_client_assoc_ctrl_req_t *as
 
 int em_steering_t::send_client_steering_req_msg()
 {
+    em_cmd_t *pcmd;
+    em_steer_params_t *steer_param;
+    em_steering_req_t agile_req, non_agile_req, *req_ptr;
+    int agile_sta_cnt = 0, non_agile_sta_cnt = 0;
+    short len = 0;
+    dm_sta_t *sta;
+    dm_easy_mesh_t *dm = get_data_model();
+    em_cmd_steer_params_t *params = &get_current_cmd()->m_param.u.steer_params;
+
+    pcmd = get_current_cmd();
+    for (int i = 0; i < params->num; i++) {
+        steer_param = &params->params[i];
+        sta = dm->find_sta(steer_param->sta_mac, steer_param->source);
+
+        if(sta != NULL) {
+            req_ptr = (sta->m_sta_info.multi_band_cap) ? &agile_req : &non_agile_req;
+            if (sta->m_sta_info.multi_band_cap == true) {
+                agile_sta_cnt++;
+            } else {
+                non_agile_sta_cnt++;
+            }
+
+            memcpy(&req_ptr->bssid, get_data_model()->m_bss[0].m_bss_info.bssid.mac, sizeof(bssid_t));
+            req_ptr->req_mode                            = steer_param->request_mode;
+            req_ptr->btm_dissoc_imminent                 = steer_param->disassoc_imminent;
+            req_ptr->btm_abridged                        = steer_param->btm_abridged;
+            //ignore this if its a mandate req
+            req_ptr->steering_opportunity_window = (steer_param->request_mode == 1) ? 0 : steer_param->steer_opportunity_win;
+            req_ptr->btm_dissoc_timer                    = htons(steer_param->btm_disassociation_timer);
+            req_ptr->target_bssid_list_count             = 1;
+            req_ptr->bss_list                            = (em_steering_req_bss_list_t *)calloc(0, sizeof(em_steering_req_bss_list_t) * req_ptr->target_bssid_list_count);
+            memcpy(req_ptr->bss_list->target_bssids, steer_param->target, sizeof(mac_addr_t));
+            req_ptr->bss_list->target_bss_op_class       = steer_param->target_op_class;
+            req_ptr->bss_list->target_bss_channel_num    = steer_param->target_channel;
+        }
+    }
+
+    agile_req.sta_list_count = agile_sta_cnt;
+    non_agile_req.sta_list_count = non_agile_sta_cnt;
+    agile_req.sta_mac_addr = (mac_address_t *)calloc(0, sizeof(mac_address_t) * agile_req.sta_list_count);
+    non_agile_req.sta_mac_addr = (mac_address_t *)calloc(0, sizeof(mac_address_t) * non_agile_req.sta_list_count);
+
+    agile_sta_cnt = non_agile_sta_cnt = 0;
+    for (int i = 0; i < params->num; i++) {
+        steer_param = &params->params[i];
+        sta = dm->find_sta(steer_param->sta_mac, steer_param->source);
+
+        req_ptr = (sta->m_sta_info.multi_band_cap) ? &agile_req : &non_agile_req;
+        int index = (sta->m_sta_info.multi_band_cap) ? agile_sta_cnt++ : non_agile_sta_cnt++;
+        memcpy(&req_ptr->sta_mac_addr[index], steer_param->sta_mac, sizeof(mac_address_t));
+    }
+
+    if (agile_req.sta_list_count > 0) {
+        len = sizeof(em_steering_req_t) + (agile_sta_cnt * sizeof(mac_addr_t)) + (agile_req.target_bssid_list_count * sizeof(em_steering_req_bss_list_t));
+        printf("%s:%d: Sending agile multiband request for sta entries %d of len %d\n", __func__, __LINE__, agile_req.sta_list_count, len);
+        send_client_steering_req_msg(&agile_req, len, true);
+    }
+
+    if (non_agile_req.sta_list_count > 0) {
+        len = sizeof(em_steering_req_t) + (non_agile_sta_cnt * sizeof(mac_addr_t)) + sizeof(em_steering_req_bss_list_t);
+        printf("%s:%d: Sending non agile multiband request for sta entries %d of len %d\n", __func__, __LINE__, non_agile_req.sta_list_count, len);
+        send_client_steering_req_msg(&non_agile_req, len, false);
+    }
+
+    free(agile_req.sta_mac_addr);
+    free(non_agile_req.sta_mac_addr);
+    //free(agile_req.bss_list);
+    //free(non_agile_req.bss_list);
+
+    return len;
+}
+
+int em_steering_t::send_client_steering_req_msg(em_steering_req_t *req, int length, bool if_multiband)
+{
     unsigned char buff[MAX_EM_BUFF_SZ];
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
     unsigned short  msg_id = em_msg_type_client_steering_req;
@@ -158,9 +232,7 @@ int em_steering_t::send_client_steering_req_msg()
     em_tlv_t *tlv;
     unsigned char *tmp = buff;
     unsigned short type = htons(ETH_P_1905);
-    dm_easy_mesh_t *dm;
-
-    dm = get_data_model();
+    dm_easy_mesh_t *dm = get_data_model();
 
     memcpy(tmp, dm->get_agent_al_interface_mac(), sizeof(mac_address_t));
     tmp += sizeof(mac_address_t);
@@ -187,8 +259,12 @@ int em_steering_t::send_client_steering_req_msg()
 
     // 17.2.29 Steering Request TLV/ Profile-2 Steering Request TLV 17.2.57
     tlv = (em_tlv_t *)tmp;
-    tlv->type = em_tlv_type_steering_request;
-    sz = create_btm_request_tlv(tlv->value);
+    if (if_multiband == true) {
+        tlv->type = em_tlv_type_profile2_steering_request;
+    } else {
+        tlv->type = em_tlv_type_steering_request;
+    }
+    sz = create_btm_request_tlv(tlv->value, req, length, if_multiband);
     tlv->len = htons(sz);
 
     tmp += (sizeof(em_tlv_t) + sz);
@@ -202,7 +278,7 @@ int em_steering_t::send_client_steering_req_msg()
     tmp += (sizeof (em_tlv_t));
     len += (sizeof (em_tlv_t));
 
-    if (em_msg_t(em_msg_type_client_steering_req, em_profile_type_2, buff, len).validate(errors) == 0) {
+    if (em_msg_t((em_msg_type_t)msg_id, em_profile_type_2, buff, len).validate(errors) == 0) {
         printf("Client Steering Request msg validation failed\n");
         return -1;
     }
@@ -282,6 +358,7 @@ int em_steering_t::send_btm_report_msg(mac_address_t sta, bssid_t bss)
     }
 
     printf("%s:%d: Steering BTM report send success:%d\n", __func__, __LINE__);
+    set_state(em_state_agent_configured);
 
     return len;
 }
@@ -356,33 +433,44 @@ int em_steering_t::send_1905_ack_message(mac_addr_t sta_mac)
     return len;
 }
 
-short em_steering_t::create_btm_request_tlv(unsigned char *buff)
+short em_steering_t::create_btm_request_tlv(unsigned char *buff, em_steering_req_t *req, int length, bool if_multiband)
 {
     short len = 0;
-    em_steering_req_t *req = (em_steering_req_t *)buff;
-    em_cmd_steer_params_t *params = &get_current_cmd()->m_param.u.steer_params;
+    em_profile2_steering_req_t *preq = (em_profile2_steering_req_t *)buff;
+    unsigned char *tmp = buff;
     mac_addr_str_t mac_str;
 
-    memcpy(&req->bssid, get_data_model()->m_bss[0].m_bss_info.bssid.mac, sizeof(bssid_t));
-    req->req_mode                           = params->request_mode;
-    req->btm_dissoc_imminent                = params->disassoc_imminent;
-    req->btm_abridged                       = params->btm_abridged;
-    if(params->request_mode == 1)
-    {
-        //ignore this
-    req->steering_opportunity_window        = 0;
-    } else {
-        req->steering_opportunity_window    = params->steer_opportunity_win;
-    }
-    req->btm_dissoc_timer                   = htons(params->btm_disassociation_timer);
-    req->sta_list_count                     = 1;
-    memcpy(req->sta_mac_addr, params->sta_mac, sizeof(mac_addr_t));
-    req->target_bssid_list_count            = 1;
-    memcpy(req->target_bssids, params->target, sizeof(mac_addr_t));
-    req->target_bss_op_class                = params->target_op_class;;
-    req->target_bss_channel_num             = params->target_channel;
+    // Calculate the offset for sta_mac_addr
+    size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
+    // Calculate the offset for bss_list (assuming it follows sta_mac_addr)
+    size_t offset_bss_list = offset_sta_mac_addr + (sizeof(mac_address_t) * req->sta_list_count);
 
-    len += sizeof(em_steering_req_t);
+    memcpy(&preq->agile_multiband, req, length);
+    tmp += offset_sta_mac_addr;
+    len += offset_sta_mac_addr;
+
+    // Copy the MAC addresses to the buffer
+    for (int i = 0; i < req->sta_list_count; i++) {
+        memcpy(tmp, req->sta_mac_addr[i], sizeof(mac_address_t));
+        tmp += sizeof(mac_address_t);
+        len += sizeof(mac_address_t);
+    }
+
+    memcpy(tmp, &req->target_bssid_list_count, sizeof(unsigned char));
+    tmp += sizeof(unsigned char);
+    len += sizeof(unsigned char);
+
+    for (int i = 0; i < req->target_bssid_list_count; i++) {
+        memcpy(tmp, &req->bss_list[i], sizeof(em_steering_req_bss_list_t));
+        tmp += sizeof(em_steering_req_bss_list_t);
+        len += sizeof(em_steering_req_bss_list_t);
+    }
+
+    if (if_multiband == true) {
+        preq->reason_code = 1;
+        tmp += sizeof(preq->reason_code);
+        len += sizeof(preq->reason_code);
+    }
 
     return len;
 }
@@ -434,7 +522,7 @@ short em_steering_t::create_error_code_tlv(unsigned char *buff, int val, mac_add
     return len;
 }
 
-int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int len)
+int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int len, unsigned int type)
 {
     em_tlv_t *tlv;
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
@@ -443,8 +531,9 @@ int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int 
     em_event_t  ev;
     em_bus_event_t *bev;
     int tlv_len = 0;
+    unsigned char *tmp;
 
-    if (em_msg_t(em_msg_type_client_steering_req, em_profile_type_2, buff, len).validate(errors) == 0) {
+    if (em_msg_t((em_msg_type_t)type, em_profile_type_2, buff, len).validate(errors) == 0) {
         printf("%s:%d:Client Steering Request message validation failed\n");
         return -1;
     }
@@ -453,16 +542,22 @@ int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int 
     tlv_len = ntohs(tlv->len);
     steer_req =  (em_steering_req_t *)&tlv->value;
 
+    size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
+
     ev.type = em_event_type_bus;
     bev = &ev.u.bevt;
     bev->type = em_bus_event_type_bss_tm_req;
-    memcpy(bev->u.raw_buff, steer_req, tlv_len);
+    memcpy(bev->u.raw_buff, &tlv->value, tlv_len);
 
-    dm_easy_mesh_t::macbytes_to_string(steer_req->sta_mac_addr, mac_str);
-    printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str);
+    for (int i = 0; i < steer_req->sta_list_count; i++) {
+        dm_easy_mesh_t::macbytes_to_string(&byte[offset_sta_mac_addr + i], mac_str);
+        printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str);
+        offset_sta_mac_addr += sizeof(mac_address_t);
+    }
+
     em_cmd_exec_t::send_cmd(em_service_type_agent, (unsigned char *)&ev, sizeof(em_event_t));
 
-    send_1905_ack_message(steer_req->sta_mac_addr);
+    send_1905_ack_message(&byte[offset_sta_mac_addr]);
 
     return 0;
 }
@@ -520,7 +615,7 @@ void em_steering_t::process_ctrl_state()
 void em_steering_t::process_agent_state()
 {
     switch (get_state()) {
-        case em_state_agent_steer_btm_res_pending:
+        case em_state_agent_steer_btm_res_pending
             send_btm_report_msg(get_radio_interface_mac(), get_radio_interface_mac());
             break;
 
@@ -544,7 +639,7 @@ void em_steering_t::process_msg(unsigned char *data, unsigned int len)
 
     switch (htons(cmdu->type)) {
         case em_msg_type_client_steering_req:
-            handle_client_steering_req(data, len);
+            handle_client_steering_req(data, len, htons(cmdu->type));
             break;
 
         case em_msg_type_client_steering_btm_rprt:

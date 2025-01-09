@@ -98,7 +98,7 @@ bool em_orch_agent_t::is_em_ready_for_orch_fini(em_cmd_t *pcmd, em_t *em)
             break;
 
         case em_cmd_type_btm_report:
-            if (em->get_state() >= em_state_agent_configured) {
+            if (em->get_state() == em_state_agent_configured ) {
                 return true;
             }
             break;

@@ -147,7 +147,7 @@ int em_metrics_t::handle_associated_sta_link_metrics_query(unsigned char *buff, 
 
     memcpy(sta, tlv->value, sizeof(mac_address_t));
 
-    send_associated_link_metrics_response(sta);
+    send_associated_link_metrics_response(sta, hdr->src);
     set_state(em_state_agent_configured);
 
     return 0;
@@ -313,7 +313,7 @@ int em_metrics_t::send_all_associated_sta_link_metrics_msg()
     }
 }
 
-int em_metrics_t::send_associated_link_metrics_response(mac_address_t sta_mac)
+int em_metrics_t::send_associated_link_metrics_response(mac_address_t sta_mac, unsigned char *dst)
 {
     unsigned char buff[MAX_EM_BUFF_SZ];
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
@@ -347,7 +347,7 @@ int em_metrics_t::send_associated_link_metrics_response(mac_address_t sta_mac)
 
     dm_easy_mesh_t::macbytes_to_string(sta_mac, mac_str);
 
-    memcpy(tmp, dm->get_ctrl_al_interface_mac(), sizeof(mac_address_t));
+    memcpy(tmp, (unsigned char *)dst, sizeof(mac_address_t));
     tmp += sizeof(mac_address_t);
     len += sizeof(mac_address_t);
 

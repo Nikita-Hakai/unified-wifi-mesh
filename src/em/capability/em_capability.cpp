@@ -613,7 +613,7 @@ void em_capability_t::process_agent_state()
 
 em_capability_t::em_capability_t()
 {
-
+    m_cap_query_tx_cnt = 0;
 }
 
 em_capability_t::~em_capability_t()

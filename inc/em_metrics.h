@@ -32,7 +32,7 @@ class em_metrics_t {
 
     int send_all_associated_sta_link_metrics_msg();
     int send_associated_sta_link_metrics_msg(mac_address_t sta_mac);
-    int send_associated_link_metrics_response(mac_address_t sta_mac);
+    int send_associated_link_metrics_response(mac_address_t sta_mac, unsigned char *dst);
 
     int handle_associated_sta_link_metrics_query(unsigned char *buff, unsigned int len);
     int handle_associated_sta_link_metrics_resp(unsigned char *buff, unsigned int len);

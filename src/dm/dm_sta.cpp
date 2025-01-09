@@ -193,6 +193,7 @@ void dm_sta_t::encode(cJSON *obj, em_get_sta_list_reason_t reason)
             cJSON_AddItemToArray(vendor_info, vendor);
         }
         cJSON_AddItemToObject(obj, "VendorSpecific", vendor_info);
+        cJSON_AddNumberToObject(obj, "Muti-band", m_sta_info.multi_band_cap);
     } else if (reason == em_get_sta_list_reason_steer) {
         reason_obj = cJSON_CreateObject();
         cJSON_AddItemToObject(obj, "ClientSteer", reason_obj);

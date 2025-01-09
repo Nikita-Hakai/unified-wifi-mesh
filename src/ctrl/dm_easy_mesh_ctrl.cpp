@@ -329,8 +329,10 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
         return 0;
     }
 
+    memset(&steer_param, 0, sizeof(steer_param));
     for (i = 0; i < cJSON_GetArraySize(dev_list_obj); i++) {
         dev_obj = cJSON_GetArrayItem(dev_list_obj, i);
+
         if ((radio_list_obj = cJSON_GetObjectItem(dev_obj, "RadioList")) == NULL) {
             continue;
         }
@@ -352,7 +354,6 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
 
                 for (l = 0; l < cJSON_GetArraySize(sta_list_obj); l++) {
                     sta_obj = cJSON_GetArrayItem(sta_list_obj, l);
-                    memset(&steer_param, 0, sizeof(em_cmd_steer_params_t));
 
                     if ((sta_mac_obj = cJSON_GetObjectItem(sta_obj, "MACAddress")) == NULL) {
                         continue;
@@ -365,42 +366,45 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
                         continue;
                     }
 
-                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(sta_mac_obj), steer_param.sta_mac);
-                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(bss_id_obj), steer_param.source);
+                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(sta_mac_obj), steer_param.params[steer_param.num].sta_mac);
+                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(bss_id_obj), steer_param.params[steer_param.num].source);
                     target_obj = cJSON_GetObjectItem(steer_obj, "TargetBSSID");
-                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(target_obj), steer_param.target);
+                    dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(target_obj), steer_param.params[steer_param.num].target);
                     request_mode_obj = cJSON_GetObjectItem(steer_obj, "RequestMode");
                     // Check for "Steering_Opportunity"
                     if (cJSON_GetObjectItem(request_mode_obj, "Steering_Opportunity") != NULL) {
                         cJSON *steer_opp = cJSON_GetObjectItem(request_mode_obj, "Steering_Opportunity");
-                        steer_param.request_mode = cJSON_GetNumberValue(steer_opp);
+                        steer_param.params[steer_param.num].request_mode = cJSON_GetNumberValue(steer_opp);
                     }
                     // Check for "Steering_Mandate"
                     else if (cJSON_GetObjectItem(request_mode_obj, "Steering_Mandate") != NULL) {
                         cJSON *steer_mandate = cJSON_GetObjectItem(request_mode_obj, "Steering_Mandate");
-                        steer_param.request_mode = cJSON_GetNumberValue(steer_mandate);
+                        steer_param.params[steer_param.num].request_mode = cJSON_GetNumberValue(steer_mandate);
                     }
 
                     imminent_obj = cJSON_GetObjectItem(steer_obj, "BTMDisassociationImminent");
-                    steer_param.disassoc_imminent = (cJSON_IsTrue(imminent_obj) == true) ? true:false;
+                    steer_param.params[steer_param.num].disassoc_imminent = (cJSON_IsTrue(imminent_obj) == true) ? true:false;
                     bridged_obj = cJSON_GetObjectItem(steer_obj, "BTMAbridged");
-                    steer_param.btm_abridged = (cJSON_IsTrue(bridged_obj) == true) ? true:false;
+                    steer_param.params[steer_param.num].btm_abridged = (cJSON_IsTrue(bridged_obj) == true) ? true:false;
                     link_obj = cJSON_GetObjectItem(steer_obj, "LinkRemovalImminent");
-                    steer_param.link_removal_imminent = (cJSON_IsTrue(link_obj) == true) ? true:false;
+                    steer_param.params[steer_param.num].link_removal_imminent = (cJSON_IsTrue(link_obj) == true) ? true:false;
                     opportunity_obj = cJSON_GetObjectItem(steer_obj, "SteeringOpportunityWindow");
-                    steer_param.steer_opportunity_win = cJSON_GetNumberValue(opportunity_obj);
+                    steer_param.params[steer_param.num].steer_opportunity_win = cJSON_GetNumberValue(opportunity_obj);
                     timer_obj = cJSON_GetObjectItem(steer_obj, "BTMDisassociationTimer");
-                    steer_param.btm_disassociation_timer = cJSON_GetNumberValue(timer_obj);
+                    steer_param.params[steer_param.num].btm_disassociation_timer = cJSON_GetNumberValue(timer_obj);
                     op_class_obj = cJSON_GetObjectItem(steer_obj, "TargetBSSOperatingClass");
-                    steer_param.target_op_class = cJSON_GetNumberValue(op_class_obj);
+                    steer_param.params[steer_param.num].target_op_class = cJSON_GetNumberValue(op_class_obj);
                     channel_obj = cJSON_GetObjectItem(steer_obj, "TargetBSSChannel");
-                    steer_param.target_channel = cJSON_GetNumberValue(channel_obj);
+                    steer_param.params[steer_param.num].target_channel = cJSON_GetNumberValue(channel_obj);
 
-                    num += analyze_sta_steer(steer_param, cmd);
+                    steer_param.num++;
                 }
             }
         }
     }
+
+    num += analyze_sta_steer(steer_param, cmd);
+
     cJSON_free(obj);
 
     return num;

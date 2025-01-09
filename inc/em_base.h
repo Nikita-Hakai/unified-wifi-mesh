@@ -721,6 +721,12 @@ typedef struct {
 }__attribute__((__packed__)) em_steering_btm_rprt_t;
 
 typedef struct {
+    bssid_t target_bssids;
+    unsigned char target_bss_op_class;
+    unsigned char target_bss_channel_num;
+}__attribute__((__packed__)) em_steering_req_bss_list_t;
+
+typedef struct {
     bssid_t bssid;
     unsigned char req_mode : 1;
     unsigned char btm_dissoc_imminent : 1;
@@ -729,11 +735,9 @@ typedef struct {
     unsigned short steering_opportunity_window;
     unsigned short btm_dissoc_timer;
     unsigned char sta_list_count;
-    mac_address_t sta_mac_addr;
+    mac_address_t *sta_mac_addr;
     unsigned char target_bssid_list_count;
-    bssid_t target_bssids;
-    unsigned char target_bss_op_class;
-    unsigned char target_bss_channel_num;
+    em_steering_req_bss_list_t *bss_list;
 }__attribute__((__packed__)) em_steering_req_t;
 
 typedef struct {
@@ -2612,6 +2616,11 @@ typedef struct {
     unsigned int    btm_disassociation_timer;
     unsigned int 	target_op_class;
     unsigned int	target_channel;
+} em_steer_params_t;
+
+typedef struct {
+    unsigned int num;
+    em_steer_params_t	params[MAX_STA_TO_DISASSOC];
 } em_cmd_steer_params_t;
 
 typedef struct {

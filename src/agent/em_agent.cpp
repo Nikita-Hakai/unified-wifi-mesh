@@ -461,7 +461,7 @@ int em_agent_t::mgmt_action_frame_cb(char *event_name, raw_data_t *data)
     em_event_t evt;
     struct ieee80211_mgmt *btm_frame = (struct ieee80211_mgmt *)data->raw_data.bytes;
 
-    //printf("Received Frame data for event %s \n", event_name);
+    printf("%s:%d Received Frame data for event %s \n", __func__, __LINE__, event_name);
     if(btm_frame->u.action.u.bss_tm_resp.action == WLAN_WNM_BTM_RESPONSE)
     {
         bevt = &evt.u.bevt;
@@ -469,7 +469,6 @@ int em_agent_t::mgmt_action_frame_cb(char *event_name, raw_data_t *data)
         memcpy(bevt->u.raw_buff, data->raw_data.bytes, data->raw_data_len);
 
         g_agent.agent_input(&evt);
-
         return 1;
     }
 
@@ -516,6 +515,7 @@ int em_agent_t::sta_cb(char *event_name, raw_data_t *data)
 
     g_agent.agent_input(&evt);
 
+    return NULL;
 }
 
 int em_agent_t::onewifi_cb(char *event_name, raw_data_t *data)
@@ -756,11 +756,11 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
             break;
 
         case em_msg_type_client_steering_req:
-            printf("\n%s:%d: Rcvd Client steering request\n", __func__, __LINE__);
             em = (em_t *)hash_map_get_first(m_em_map);
             while (em != NULL) {
                 if ((em->is_al_interface_em() == false)) {
-                    //printf("%s:%d: Found em\n", __func__, __LINE__);
+                    dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str1);
+                    printf("\n%s:%d: Rcvd Client steering request for radio %s\n", __func__, __LINE__, mac_str1);
                     break;
                 }
                 em = (em_t *)hash_map_get_next(m_em_map, em);

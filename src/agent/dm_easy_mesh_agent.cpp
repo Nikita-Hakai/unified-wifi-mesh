@@ -598,13 +598,18 @@ int dm_easy_mesh_agent_t::analyze_btm_request_action_frame(em_bus_event_t *evt, 
     action_frame_params_t *aframe;
     raw_data_t l_bus_data;
     int len = 0;
+    int bss_cnt = 0;
     mac_addr_str_t mac_str;
     em_steering_req_t *steer_req = (em_steering_req_t *)&evt->u.raw_buff;
+    unsigned char *tmp = (unsigned char *)&evt->u.raw_buff;
+
+    // Calculate the offset for sta_mac_addr and bss_list
+    size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
+    size_t offset_bss_list = offset_sta_mac_addr + 1 + (sizeof(mac_address_t) * steer_req->sta_list_count);
 
     len = sizeof(ieeeframe->u.action.category) + sizeof(ieeeframe->u.action.u.bss_tm_req) \
         + sizeof(em_80211_neighbor_report_t);
     aframe = (action_frame_params_t *)malloc(sizeof(action_frame_params_t) + len);
-    // Point ieeeframe to aframe->frame_data
     ieeeframe = (struct ieee80211_mgmt *)aframe->frame_data;
 
     //convert steering req to 802.11 bss tm req
@@ -630,17 +635,26 @@ int dm_easy_mesh_agent_t::analyze_btm_request_action_frame(em_bus_event_t *evt, 
     em_80211_btm_req_var_t *bss_list = (em_80211_btm_req_var_t *)&ieeeframe->u.action.u.bss_tm_req.variable;
     bss_list->bss_transition_cand_list[0].elem_id = 52;
     bss_list->bss_transition_cand_list[0].length = 13;
-    memcpy(bss_list->bss_transition_cand_list[0].bssid, steer_req->target_bssids, sizeof(bssid_t));
+
+    memcpy(bss_list->bss_transition_cand_list[0].bssid, &tmp[offset_bss_list], sizeof(bssid_t));
+
     //todo: capabilities mapping tbd
     bss_list->bss_transition_cand_list[0].bssid_info = 0;
-        bss_list->bss_transition_cand_list[0].op_class = steer_req->target_bss_op_class;
-    bss_list->bss_transition_cand_list[0].channel_num = steer_req->target_bss_channel_num;
+    bss_list->bss_transition_cand_list[0].op_class = tmp[offset_bss_list + sizeof(bssid_t)];
+    bss_list->bss_transition_cand_list[0].channel_num = tmp[offset_bss_list + sizeof(bssid_t) + sizeof(unsigned char)];
     //todo: check how to get this
     bss_list->bss_transition_cand_list[0].phy_type = 0;
 
-    dm_easy_mesh_t::macbytes_to_string(steer_req->sta_mac_addr, mac_str);
-    printf("%s:%d STA MAC for BTM request %s\n", __func__, __LINE__, mac_str);
-    memcpy(aframe->dest_addr, steer_req->sta_mac_addr, sizeof(mac_addr_t));
+    memcpy(aframe->dest_addr, &tmp[offset_sta_mac_addr], sizeof(mac_addr_t));
+
+    for (int i = 0; i < steer_req->sta_list_count; i++) {
+        dm_easy_mesh_t::macbytes_to_string(&tmp[offset_sta_mac_addr + i], mac_str);
+        printf("%s:%d Received steer req for sta=%s\n", __func__, __LINE__, mac_str);
+        offset_sta_mac_addr += sizeof(mac_address_t);
+    }
+
+    bss_cnt = tmp[offset_sta_mac_addr];
+
     aframe->frequency = 2412;
     aframe->ap_index = 0;
     //here sendng only the btm_req union to onewifi as header is dealt internally
@@ -664,7 +678,6 @@ int dm_easy_mesh_agent_t::analyze_btm_request_action_frame(em_bus_event_t *evt, 
 
 int dm_easy_mesh_agent_t::analyze_btm_response_action_frame(em_bus_event_t *evt, em_cmd_t *pcmd[])
 {
-    //TODO: if callback would give for multiple entries or one by one
     dm_easy_mesh_agent_t  dm;
     em_cmd_t *tmp;
     em_cmd_params_t *evt_param;
