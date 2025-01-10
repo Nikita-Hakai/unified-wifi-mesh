@@ -528,8 +528,6 @@ int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int 
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
     em_steering_req_t *steer_req;
     mac_addr_str_t mac_str;
-    em_event_t  ev;
-    em_bus_event_t *bev;
     int tlv_len = 0;
     unsigned char *tmp;
 
@@ -541,23 +539,29 @@ int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int 
     tlv = (em_tlv_t *)(buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
     tlv_len = ntohs(tlv->len);
     steer_req =  (em_steering_req_t *)&tlv->value;
+    tmp =  (unsigned char *)&tlv->value;
 
     size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
 
-    ev.type = em_event_type_bus;
+/*     ev.type = em_event_type_bus;
     bev = &ev.u.bevt;
     bev->type = em_bus_event_type_bss_tm_req;
     memcpy(bev->u.raw_buff, &tlv->value, tlv_len);
-
+ */
     for (int i = 0; i < steer_req->sta_list_count; i++) {
-        dm_easy_mesh_t::macbytes_to_string(&byte[offset_sta_mac_addr + i], mac_str);
+        dm_easy_mesh_t::macbytes_to_string(&tmp[offset_sta_mac_addr + i], mac_str);
         printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str);
         offset_sta_mac_addr += sizeof(mac_address_t);
     }
 
-    em_cmd_exec_t::send_cmd(em_service_type_agent, (unsigned char *)&ev, sizeof(em_event_t));
+    //em_cmd_exec_t::send_cmd(em_service_type_agent, (unsigned char *)&ev, sizeof(em_event_t));
+    /* dm_easy_mesh_t::macbytes_to_string(steer_req->sta_mac_addr, mac_str);
+    printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str); */
+    
+	//get_mgr()->io_process(em_bus_event_type_bss_tm_req, (unsigned char *)steer_req, sizeof(em_steering_req_t));
+    get_mgr()->io_process(em_bus_event_type_bss_tm_req, (unsigned char *)tmp, tlv_len);
 
-    send_1905_ack_message(&byte[offset_sta_mac_addr]);
+    send_1905_ack_message(&tmp[offset_sta_mac_addr]);
 
     return 0;
 }
@@ -615,7 +619,7 @@ void em_steering_t::process_ctrl_state()
 void em_steering_t::process_agent_state()
 {
     switch (get_state()) {
-        case em_state_agent_steer_btm_res_pending
+        case em_state_agent_steer_btm_res_pending:
             send_btm_report_msg(get_radio_interface_mac(), get_radio_interface_mac());
             break;
 

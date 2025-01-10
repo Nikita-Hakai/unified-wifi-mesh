@@ -40,6 +40,7 @@ class em_steering_t {
     short create_btm_request_tlv(unsigned char *buff, em_steering_req_t *req, int length, bool if_multiband);
 
 public:
+	virtual em_mgr_t *get_mgr() = 0;
     virtual int send_frame(unsigned char *buff, unsigned int len, bool multicast = false) = 0;
     virtual dm_easy_mesh_t *get_data_model() = 0;
     virtual unsigned char *get_radio_interface_mac() = 0;
