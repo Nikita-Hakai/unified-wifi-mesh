@@ -43,6 +43,8 @@
 #include "em.h"
 #include "em_mgr.h"
 #include "em_msg.h"
+#include "em_cmd.h"
+#include "util.h"
 
 extern char *global_netid;
 
@@ -281,14 +283,14 @@ void em_mgr_t::nodes_listener()
     unsigned char buff[MAX_EM_BUFF_SZ];
     em_raw_hdr_t *hdr;
 
-    tm.tv_sec = m_timeout;
-    tm.tv_usec = 0;
+    tm.tv_sec = 0;
+    tm.tv_usec = m_timeout * 1000;
     highest_fd = reset_listeners();
 
     while ((rc = select(highest_fd + 1, &m_rset, NULL, NULL, &tm)) >= 0) {
         if (rc == 0) {
-            tm.tv_sec = m_timeout;
-            tm.tv_usec = 0;
+            tm.tv_sec = 0;
+            tm.tv_usec = m_timeout * 1000;
             highest_fd = reset_listeners();
 
             continue;
@@ -313,8 +315,8 @@ void em_mgr_t::nodes_listener()
             em = (em_t *)hash_map_get_next(m_em_map, em);
         }
 
-        tm.tv_sec = m_timeout;
-        tm.tv_usec = 0;
+        tm.tv_sec = 0;
+        tm.tv_usec = m_timeout * 1000;
         highest_fd = reset_listeners();
 
     }
@@ -357,8 +359,8 @@ int em_mgr_t::start()
 
         gettimeofday(&tm, NULL);
         time_to_wait.tv_sec = tm.tv_sec;
-        time_to_wait.tv_nsec = tm.tv_usec * 1000;
-        time_to_wait.tv_sec += m_queue.timeout;
+       	time_to_wait.tv_nsec = tm.tv_usec * 1000;
+		add_milliseconds(&time_to_wait, m_queue.timeout);		
 
         if (queue_count(m_queue.queue) == 0) {
             rc = pthread_cond_timedwait(&m_queue.cond, &m_queue.lock, &time_to_wait);
@@ -371,7 +373,9 @@ int em_mgr_t::start()
                     continue;
                 }
                 pthread_mutex_unlock(&m_queue.lock);
-                if (((evt->type == em_event_type_bus) && (evt->u.bevt.type == em_bus_event_type_reset)) || (is_data_model_initialized() == true)) {
+                if (((evt->type == em_event_type_bus) && (evt->u.bevt.type == em_bus_event_type_reset)) || 
+						(is_data_model_initialized() == true)) {
+		
                     handle_event(evt);
                 }
                 free(evt);
@@ -385,7 +389,7 @@ int em_mgr_t::start()
             }
             pthread_mutex_lock(&m_queue.lock);
         } else {
-            printf("%s:%d em exited with rc - %d",__func__,__LINE__,rc);
+            printf("%s:%d em exited with rc - %d\n",__func__,__LINE__, rc);
             pthread_mutex_unlock(&m_queue.lock);
             return -1;
         }

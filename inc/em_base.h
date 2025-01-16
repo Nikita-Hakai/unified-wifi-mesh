@@ -45,7 +45,7 @@ extern "C"
 #define EM_MAX_E4_TABLE_CHANNEL 32
 
 #define EM_PROTO_TOUT   1
-#define EM_MGR_TOUT     0.5
+#define EM_MGR_TOUT     500 // in milliseconds
 #define EM_METRICS_REQ_MULT 5
 #define EM_2_TOUT_MULT 	4
 #define EM_5_TOUT_MULT 	10
@@ -76,6 +76,7 @@ extern "C"
 #define EM_MAX_STA_PER_BSS         128
 #define EM_MAX_STA_PER_STEER_POLICY        16 
 #define EM_MAX_STA_PER_AGENT       (EM_MAX_RADIO_PER_AGENT * EM_MAX_STA_PER_BSS)
+#define EM_MAX_NEIGHORS		32
 
 #define   EM_MAX_EVENT_DATA_LEN   4096*100
 #define EM_MAX_CHANNELS_IN_LIST  9
@@ -392,6 +393,7 @@ typedef enum {
     em_msg_type_ap_mld_config_resp,
     em_msg_type_bsta_mld_config_req,
     em_msg_type_bsta_mld_config_resp,
+    em_msg_type_avail_spectrum_inquiry = 0x8049,
 } em_msg_type_t;
 
 typedef enum {
@@ -550,6 +552,8 @@ typedef enum {
     em_tlv_type_assoc_sta_mld_conf_rep = 0xe2,
     em_tlv_type_tid_to_link_map_policy = 0xe6,
     em_tlv_eht_operations = 0xe7,
+    em_tlv_type_avail_spectrum_inquiry_reg = 0xe8,
+    em_tlv_type_avail_spectrum_inquiry_rsp = 0xe9,
     em_tlv_vendor_sta_metrics = 0xf1,
 
 	// RDK Proprietary TLV values
@@ -640,6 +644,36 @@ typedef struct {
     unsigned char timestamp_length;
     unsigned char timestamp[0]; 
 }__attribute__((__packed__)) em_timestamp_t;
+
+typedef struct {
+    em_long_string_t    net_id;
+	mac_address_t	dev_mac;
+	em_radio_id_t ruid;
+    unsigned char op_class;
+    unsigned char channel;
+} em_scan_result_id_t;
+
+typedef struct {
+	bssid_t bssid;
+	ssid_t	ssid;
+    signed char signal_strength;
+	wifi_channelBandwidth_t	bandwidth;
+    unsigned char bss_color;
+    unsigned char channel_util;
+    unsigned short sta_count;
+    unsigned int  aggr_scan_duration;
+    unsigned char scan_type;
+} em_neighbor_t;
+
+typedef struct {
+	em_scan_result_id_t	id;
+	unsigned char scan_status;
+	em_long_string_t timestamp;
+    unsigned char util;
+    unsigned char noise;
+	unsigned int num_neighbors;
+	em_neighbor_t	neighbor[EM_MAX_NEIGHORS];
+} em_scan_result_t;
 
 typedef struct {
     em_radio_id_t ruid;
@@ -1527,6 +1561,14 @@ typedef struct {
 } __attribute__((__packed__)) em_eht_operations_t;
 
 typedef struct {
+    unsigned char *avail_spectrum_inquiry_req_obj;
+} __attribute__((__packed__)) em_avail_spectrum_inquiry_req_t;
+
+typedef struct {
+    unsigned char *avail_spectrum_inquiry_rsp_obj;
+} __attribute__((__packed__)) em_avail_spectrum_inquiry_rsp_t;
+
+typedef struct {
     em_radio_id_t  ruid;
     unsigned char  boot_only : 1;
     unsigned char  scan_impact : 2;
@@ -1789,6 +1831,7 @@ typedef enum {
     em_state_ctrl_set_policy_pending,
     em_state_ctrl_ap_mld_config_pending,
     em_state_ctrl_ap_mld_configured,
+    em_state_ctrl_avail_spectrum_inquiry_pending,
 
     em_state_max,
 } em_state_t;
@@ -1831,6 +1874,7 @@ typedef enum {
     em_cmd_type_sta_disassoc,
     em_cmd_type_get_policy,
     em_cmd_type_set_policy,
+    em_cmd_type_avail_spectrum_inquiry,
     em_cmd_type_max,
 } em_cmd_type_t;
 
@@ -2530,9 +2574,11 @@ typedef enum {
 	db_cfg_type_radio_cap_list_delete = (1 << 15),
 	db_cfg_type_1905_security_list_update = (1 << 16),
 	db_cfg_type_1905_security_list_delete = (1 << 17),
-  db_cfg_type_sta_metrics_update = (1 << 18),
+	db_cfg_type_sta_metrics_update = (1 << 18),
 	db_cfg_type_policy_list_update = (1 << 19),
 	db_cfg_type_policy_list_delete = (1 << 20),
+	db_cfg_type_scan_result_list_update = (1 << 21),
+	db_cfg_type_scan_result_list_delete = (1 << 22),
 } db_cfg_type_t;
 
 typedef struct{
