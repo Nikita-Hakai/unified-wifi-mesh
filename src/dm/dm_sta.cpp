@@ -186,6 +186,7 @@ void dm_sta_t::encode(cJSON *obj, em_get_sta_list_reason_t reason)
         cJSON_AddStringToObject(obj, "SupportedOperatingClasses", m_sta_info.supp_op_classes);
         cJSON_AddStringToObject(obj, "ExtendedCapabilities", m_sta_info.ext_cap);
         cJSON_AddStringToObject(obj, "RMEnabledCapabilities", m_sta_info.rm_cap);
+        cJSON_AddNumberToObject(obj, "Muti-band", m_sta_info.multi_band_cap);
         cJSON *vendor_info = cJSON_CreateArray();
         for (int i = 0; i < m_sta_info.num_vendor_infos; i++) {
             cJSON *vendor = cJSON_CreateObject();
@@ -193,7 +194,6 @@ void dm_sta_t::encode(cJSON *obj, em_get_sta_list_reason_t reason)
             cJSON_AddItemToArray(vendor_info, vendor);
         }
         cJSON_AddItemToObject(obj, "VendorSpecific", vendor_info);
-        cJSON_AddNumberToObject(obj, "Muti-band", m_sta_info.multi_band_cap);
     } else if (reason == em_get_sta_list_reason_steer) {
         reason_obj = cJSON_CreateObject();
         cJSON_AddItemToObject(obj, "ClientSteer", reason_obj);

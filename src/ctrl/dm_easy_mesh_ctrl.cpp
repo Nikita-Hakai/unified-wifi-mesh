@@ -303,6 +303,7 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
     unsigned int i, j, k, l;
     em_long_string_t wfa;
     em_cmd_steer_params_t	steer_param;
+    bool is_associated = false;
 
     subdoc = &evt->u.subdoc;
     obj = cJSON_Parse(subdoc->buff);
@@ -361,6 +362,12 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
                         continue;
                     }
                     if ((assoc_obj = cJSON_GetObjectItem(sta_obj, "Associated")) == NULL) {
+                        continue;
+                    }
+                    if (cJSON_IsTrue(assoc_obj)) {
+                        is_associated = true;
+                    } else if (cJSON_IsFalse(assoc_obj)) {
+                        is_associated = false;
                         continue;
                     }
 

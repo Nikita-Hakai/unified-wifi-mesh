@@ -623,6 +623,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
     bssid_t bss_mac;
     mac_address_t client_mac;
     bool found = false;
+    em_tlv_t    *tlv;
 
     assert(len > ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))));
     if (len < ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)))) {
@@ -764,7 +765,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
             break;
 
         case em_msg_type_assoc_sta_link_metrics_query:
-            printf("\n%s:%d: Rcvd Assoc STA Link Metrics Query\n", __func__, __LINE__);
+            //printf("\n%s:%d: Rcvd Assoc STA Link Metrics Query\n", __func__, __LINE__);
 
             em = (em_t *)hash_map_get_first(m_em_map);
             while (em != NULL) {
@@ -776,23 +777,21 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
             break;
 
         case em_msg_type_assoc_sta_link_metrics_rsp:
-            printf("%s:%d: Sending Assoc STA Link Metrics response\n", __func__, __LINE__);
+            //printf("%s:%d: Sending Assoc STA Link Metrics response\n", __func__, __LINE__);
             break;
 
         case em_msg_type_client_steering_req:
-            em = (em_t *)hash_map_get_first(m_em_map);
-            while (em != NULL) {
-                if ((em->is_al_interface_em() == false)) {
-                    dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str1);
-                    printf("\n%s:%d: Rcvd Client steering request for radio %s\n", __func__, __LINE__, mac_str1);
-                    break;
-                }
-                em = (em_t *)hash_map_get_next(m_em_map, em);
-            }
-            break;
+            tlv = em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
+                len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_tlv(em_tlv_type_profile2_steering_request);
 
-        case em_msg_type_client_steering_btm_rprt:
-            printf("%s:%d: Sending Client BTM REPORT\n", __func__, __LINE__);
+            dm_easy_mesh_t::macbytes_to_string(tlv->value, mac_str1);
+            //printf("\n%s:%d: Rcvd Client steering request for bss %s\n", __func__, __LINE__, mac_str1);
+            if ((em = (em_t *)hash_map_get(m_em_map, mac_str1)) != NULL) {
+                printf("%s:%d: Received Client steering request, found existing BSS:%s\n", __func__, __LINE__, mac_str1);
+            } else {
+                printf("%s:%d: Could not find em for em_msg_type_client_steering_req for bss:%s\n", __func__, __LINE__, mac_str1);
+                return NULL;
+            }
             break;
 
 		case em_msg_type_channel_scan_req:
@@ -808,6 +807,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 			
 			break;
 
+        case em_msg_type_client_steering_btm_rprt:
         case em_msg_type_1905_ack:
         case em_msg_type_map_policy_config_req:
 		case em_msg_type_channel_scan_rprt:

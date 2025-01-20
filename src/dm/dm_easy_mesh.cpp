@@ -2136,7 +2136,7 @@ em_sta_info_t *dm_easy_mesh_t::get_sta_info(mac_address_t sta_mac, bssid_t bssid
     dm_easy_mesh_t::macbytes_to_string(ruid, radio_str);
 
     snprintf(key, sizeof(em_long_string_t), "%s@%s@%s", sta_str, bss_str, radio_str);
-    printf("\n%s:%d: key=%s\n", __func__, __LINE__,key);
+    //printf("\n%s:%d: key=%s\n", __func__, __LINE__,key);
     sta = (dm_sta_t *)hash_map_get(map, key);
     if (sta == NULL) {
         printf("%s:%d: sta: %s not found in %s\n", __func__, __LINE__, sta_str, map_str);

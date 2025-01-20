@@ -343,6 +343,7 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
     em_steer_params_t *steer_param;
     dm_sta_t *sta;
     int all_sta_found = 1;
+    bool em_pushed = false;
 
     if (pcmd->m_type == em_cmd_type_em_config) {
         em = (em_t *)hash_map_get(m_mgr->m_em_map, pcmd->m_param.u.args.args[0]);
@@ -421,18 +422,21 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
                 break;
 
             case em_cmd_type_sta_steer:
-                for (i = 0; i < pcmd->m_param.u.steer_params.num; i++) {
-                    steer_param = &pcmd->m_param.u.steer_params.params[i];
-                    if ((sta = em->find_sta(steer_param->sta_mac, steer_param->source)) == NULL) {
-                        all_sta_found = 0;
-                        break;
+                em_pushed = false;
+                if (em->is_al_interface_em() == false)
+                {
+                    for (i = 0; i < pcmd->m_param.u.steer_params.num; i++) {
+                        steer_param = &pcmd->m_param.u.steer_params.params[i];
+                        sta = em->find_sta(steer_param->sta_mac, steer_param->source);
+                        if ((sta != NULL) && (sta->m_sta_info.associated != false)) {
+                            queue_push(pcmd->m_em_candidates, em);
+                            count++;
+                            dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
+                            printf("%s:%d:Found em this STA for rad=%s, candidate count: %d\n", __func__, __LINE__, mac_str, count);
+                            em_pushed = true;
+                        }
                     }
                 }
-                if (all_sta_found) {
-                    queue_push(pcmd->m_em_candidates, em);
-                    count++;
-                }
-                all_sta_found = 1;
                 break;
 
             case em_cmd_type_sta_disassoc:

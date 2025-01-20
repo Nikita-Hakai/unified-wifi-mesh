@@ -195,6 +195,9 @@ int em_steering_t::send_client_steering_req_msg()
     for (int i = 0; i < params->num; i++) {
         steer_param = &params->params[i];
         sta = dm->find_sta(steer_param->sta_mac, steer_param->source);
+        if (sta == NULL) {
+            continue;
+        }
 
         req_ptr = (sta->m_sta_info.multi_band_cap) ? &agile_req : &non_agile_req;
         int index = (sta->m_sta_info.multi_band_cap) ? agile_sta_cnt++ : non_agile_sta_cnt++;
@@ -539,26 +542,16 @@ int em_steering_t::handle_client_steering_req(unsigned char *buff, unsigned int 
     tlv = (em_tlv_t *)(buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
     tlv_len = ntohs(tlv->len);
     steer_req =  (em_steering_req_t *)&tlv->value;
-    tmp =  (unsigned char *)&tlv->value;
+    tmp = (unsigned char *)&tlv->value;
 
     size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
 
-/*     ev.type = em_event_type_bus;
-    bev = &ev.u.bevt;
-    bev->type = em_bus_event_type_bss_tm_req;
-    memcpy(bev->u.raw_buff, &tlv->value, tlv_len);
- */
     for (int i = 0; i < steer_req->sta_list_count; i++) {
         dm_easy_mesh_t::macbytes_to_string(&tmp[offset_sta_mac_addr + i], mac_str);
         printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str);
         offset_sta_mac_addr += sizeof(mac_address_t);
     }
 
-    //em_cmd_exec_t::send_cmd(em_service_type_agent, (unsigned char *)&ev, sizeof(em_event_t));
-    /* dm_easy_mesh_t::macbytes_to_string(steer_req->sta_mac_addr, mac_str);
-    printf("%s:%d Recived steer req for sta=%s\n", __func__, __LINE__, mac_str); */
-    
-	//get_mgr()->io_process(em_bus_event_type_bss_tm_req, (unsigned char *)steer_req, sizeof(em_steering_req_t));
     get_mgr()->io_process(em_bus_event_type_bss_tm_req, (unsigned char *)tmp, tlv_len);
 
     send_1905_ack_message(&tmp[offset_sta_mac_addr]);

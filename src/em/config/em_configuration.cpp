@@ -1051,7 +1051,7 @@ int em_configuration_t::handle_topology_notification(unsigned char *buff, unsign
             snprintf(key, sizeof(em_long_string_t), "%s@%s@%s", sta_mac_str, bssid_str, radio_mac_str);
 
             //printf("%s:%d: Client Device:%s %s\n", __func__, __LINE__, sta_mac_str,
-                    //(assoc_evt_tlv->assoc_event == 1)?"associated":"disassociated");
+                    //(assoc_evt_tlv->assoc_event == 1)?"associated to":"disassociated from");
 
             if ((sta = (dm_sta_t *)hash_map_get(dm->m_sta_map, key)) == NULL) {
                 eligible_to_req_cap = true;
