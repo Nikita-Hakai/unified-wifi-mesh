@@ -53,6 +53,8 @@ const (
 	BTN_MAX = 3
 )
 
+var p *tea.Program
+
 var (
     appStyle = lipgloss.NewStyle().Padding(1, 2)
 
@@ -143,8 +145,12 @@ type model struct {
 	ticker	*time.Ticker
 	timer	*time.Timer
 	easyMeshCommands	map[string]EasyMeshCmd
-	contentUpdated		bool
+	updateButtonClicked		bool
     dump 	*os.File
+}
+
+type refreshUIMsg struct {
+    index    int
 }
 
 func newModel(platform string) model {
@@ -214,7 +220,7 @@ func newModel(platform string) model {
 		tree: etree.New(nodes, false, w, h, dump),
         dump: dump,
 		easyMeshCommands: easyMeshCommands, 
-		contentUpdated: false,
+		updateButtonClicked: false,
     }
 }
 
@@ -251,6 +257,12 @@ func (m *model) timerHandler() {
 
 
 			case <- m.ticker.C:
+                if listItem, ok := m.list.Items()[6].(item); ok {
+                    m.execSelectedCommand(listItem.title, GET)
+                    if p != nil {
+                        p.Send(refreshUIMsg{index: 6})
+                    }
+                }
 
 			case <- m.quit:
 				m.ticker.Stop()
@@ -431,7 +443,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     case tea.KeyMsg:
         switch msg.String() {
         case "tab":
-			if m.contentUpdated == true {
+			if m.updateButtonClicked == true {
             	m.activeButton = (m.activeButton + 1) % BTN_MAX
 			} else {
 				if m.activeButton == BTN_UPDATE {
@@ -444,7 +456,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "j", "k":
 			m.currentOperatingInstructions = "\n\n\t Press 'w' to scroll up, 's' to scroll down"
 
-			if m.activeButton != BTN_UPDATE {
+			if m.updateButtonClicked == false {
             	newListModel, cmd := m.list.Update(msg)
             	m.list = newListModel
             	for i := range m.list.Items() {
@@ -459,8 +471,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.execSelectedCommand(selectedItem.title, GET)
 				}
 		
-				m.contentUpdated = false
-					
 			}
         
 		case "down":
@@ -477,18 +487,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
            	if m.activeButton == BTN_UPDATE {
        			m.currentOperatingInstructions = "\n\n\t Editor Mode: Press 'Apply' to apply settings, 'Cancel' to leave"
             	if selectedItem, ok := m.list.SelectedItem().(item); ok {
-					m.contentUpdated = true
+					m.updateButtonClicked = true
 					m.execSelectedCommand(selectedItem.title, GETX)
 				}
 				m.tree.SetEditable(true)
            	} else if m.activeButton == BTN_APPLY {
 				m.tree.SetEditable(false)
+				m.updateButtonClicked = false
        			m.currentOperatingInstructions = "\n\n\t Press 'w' to scroll up, 's' to scroll down"
             	if selectedItem, ok := m.list.SelectedItem().(item); ok {
 					m.execSelectedCommand(selectedItem.title, SET)
 				}
            	} else if m.activeButton == BTN_CANCEL {
 				m.tree.SetEditable(false)
+				m.updateButtonClicked = false
        			m.currentOperatingInstructions = "\n\n\t Press 'w' to scroll up, 's' to scroll down"
 			}
 
@@ -536,6 +548,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 }
             }
             cmds = append(cmds, cmd)
+        }
+
+    case refreshUIMsg:
+        //spew.Fdump(m.dump, "Refresh Data!", msg.index)
+        newListModel, cmd := m.list.Update(msg)
+        m.list = newListModel
+        // Check if the current item is at index 6
+        if listItem, ok := m.list.Items()[msg.index].(item); ok {
+            listItem.isActive = msg.index == m.list.Index()
+            m.list.SetItem(msg.index, listItem)
+        }
+        cmds = append(cmds, cmd)
+
+        if selectedItem, ok := m.list.SelectedItem().(item); ok {
+            if m.list.Index() == msg.index {
+                m.execSelectedCommand(selectedItem.title, GET)
+            }
         }
     }
 
@@ -627,7 +656,9 @@ func main() {
         os.Exit(1)
 	}
 
-    if _, err := tea.NewProgram(newModel(os.Args[1]), tea.WithAltScreen()).Run(); err != nil {
+    p = tea.NewProgram(newModel(os.Args[1]), tea.WithAltScreen())
+
+    if _, err := p.Run(); err != nil {
         fmt.Println("Error running program:", err)
         os.Exit(1)
     }
