@@ -378,6 +378,10 @@ int dm_easy_mesh_ctrl_t::analyze_command_steer(em_bus_event_t *evt, em_cmd_t *cm
                     dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(sta_mac_obj), steer_param.params[steer_param.num].sta_mac);
                     dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(bss_id_obj), steer_param.params[steer_param.num].source);
                     target_obj = cJSON_GetObjectItem(steer_obj, "TargetBSSID");
+                    if (strncmp(cJSON_GetStringValue(target_obj), "00:00:00:00:00:00", sizeof(mac_addr_str_t)) == 0) {
+                        continue;
+                    }
+
                     dm_easy_mesh_t::string_to_macbytes(cJSON_GetStringValue(target_obj), steer_param.params[steer_param.num].target);
                     request_mode_obj = cJSON_GetObjectItem(steer_obj, "RequestMode");
                     // Check for "Steering_Opportunity"

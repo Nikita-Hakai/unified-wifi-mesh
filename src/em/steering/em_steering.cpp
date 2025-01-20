@@ -176,7 +176,7 @@ int em_steering_t::send_client_steering_req_msg()
             req_ptr->btm_dissoc_imminent                 = steer_param->disassoc_imminent;
             req_ptr->btm_abridged                        = steer_param->btm_abridged;
             //ignore this if its a mandate req
-            req_ptr->steering_opportunity_window = (steer_param->request_mode == 1) ? 0 : steer_param->steer_opportunity_win;
+            req_ptr->steering_opportunity_window         = htons((steer_param->request_mode == 1) ? 0 : steer_param->steer_opportunity_win);
             req_ptr->btm_dissoc_timer                    = htons(steer_param->btm_disassociation_timer);
             req_ptr->target_bssid_list_count             = 1;
             req_ptr->bss_list                            = (em_steering_req_bss_list_t *)calloc(0, sizeof(em_steering_req_bss_list_t) * req_ptr->target_bssid_list_count);

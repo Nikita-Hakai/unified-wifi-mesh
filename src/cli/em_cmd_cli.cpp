@@ -306,7 +306,7 @@ int em_cmd_cli_t::execute(char *result)
 			if ((bevt->data_len = get_edited_node(node, "SetSSID", info->buff)) < 0) {
                 printf("%s:%d: failed to open file at location:%s error:%d\n", __func__, __LINE__, param->u.args.fixed_args, errno);
                 return -1;
-			}	
+			}
             break;
 
         case em_cmd_type_get_channel:
@@ -375,8 +375,7 @@ int em_cmd_cli_t::execute(char *result)
             break;
 
         case em_cmd_type_steer_sta:
-            snprintf(in, sizeof(em_long_string_t), "get_sta %s 1", m_cmd.m_param.u.args.args[1]);
-			if ((node = m_cli.exec(in, strlen(in), NULL)) == NULL) {
+            if ((node = m_cmd.m_param.net_node) == NULL) {
 				return -1;
 			}
             bevt->type = em_bus_event_type_steer_sta;
