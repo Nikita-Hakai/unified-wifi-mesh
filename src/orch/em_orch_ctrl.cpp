@@ -300,7 +300,10 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
             break;
 
         case dm_orch_type_db_delete:
-			dm->set_db_cfg_type(db_cfg_type_device_list_delete|db_cfg_type_radio_list_delete|db_cfg_type_bss_list_delete|db_cfg_type_op_class_list_delete|db_cfg_type_op_class_list_delete);
+			dm->set_db_cfg_param(db_cfg_type_device_list_delete, "");
+			dm->set_db_cfg_param(db_cfg_type_radio_list_delete, "");
+			dm->set_db_cfg_param(db_cfg_type_bss_list_delete, "");
+			dm->set_db_cfg_param(db_cfg_type_op_class_list_delete, "");
             m_mgr->update_tables(dm);
 			break;
 
@@ -342,8 +345,8 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
     em_disassoc_params_t *disassoc_param;
     em_steer_params_t *steer_param;
     dm_sta_t *sta;
-    int all_sta_found = 1;
     bool em_pushed = false;
+	mac_address_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
     if (pcmd->m_type == em_cmd_type_em_config) {
         em = (em_t *)hash_map_get(m_mgr->m_em_map, pcmd->m_param.u.args.args[0]);
@@ -382,11 +385,14 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
                 break;
 
             case em_cmd_type_cfg_renew:
+				// check if the radio is null mac
                 dm = pcmd->get_data_model();
-                if (memcmp(em->get_radio_interface_mac(), dm->m_radio[0].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
+				if (memcmp(null_mac, dm->m_radio[0].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
+					queue_push(pcmd->m_em_candidates, em);
+                    count++;
+				} else if (memcmp(em->get_radio_interface_mac(), dm->m_radio[0].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
                     queue_push(pcmd->m_em_candidates, em);
                     count++;
-                    break;
                 }
                 break;
 
