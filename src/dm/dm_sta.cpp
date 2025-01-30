@@ -395,12 +395,12 @@ void dm_sta_t::decode_sta_capability(dm_sta_t *sta)
                 dm_easy_mesh_t::hex(tag->length, tag->value, sizeof(em_long_string_t), sta->m_sta_info.ext_cap);
                 if (tag->length >= 3) {
                     if (tag->value[2] & (1 << 3)) {
-                        sta->m_sta_info.multi_band_cap = true;
+                        sta->m_sta_info.bss_transition = true;
                     } else {
-                        sta->m_sta_info.multi_band_cap = false;
+                        sta->m_sta_info.bss_transition = false;
                     }
                 } else {
-                    sta->m_sta_info.multi_band_cap = false;
+                    sta->m_sta_info.bss_transition = false;
                 }
                 break;
 
