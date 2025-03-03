@@ -315,6 +315,22 @@ void em_ctrl_t::handle_reset(em_bus_event_t *evt)
 
 }
 
+void em_ctrl_t::handle_mld_reconfig(em_bus_event_t *evt)
+{
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    unsigned int num;
+
+    if (m_orch->is_cmd_type_in_progress(evt->type) == true) {
+        m_ctrl_cmd->send_result(em_cmd_out_status_prev_cmd_in_progress);
+    } else if ((num = m_data_model.analyze_mld_reconfig(pcmd)) == 0) {
+        m_ctrl_cmd->send_result(em_cmd_out_status_no_change);
+    } else if (m_orch->submit_commands(pcmd, num) > 0) {
+        m_ctrl_cmd->send_result(em_cmd_out_status_success);
+    } else {
+        m_ctrl_cmd->send_result(em_cmd_out_status_not_ready);
+    }
+}
+
 void em_ctrl_t::handle_radio_metrics_req()
 {
 
@@ -387,6 +403,7 @@ void em_ctrl_t::handle_bus_event(em_bus_event_t *evt)
         case em_bus_event_type_get_sta:
         case em_bus_event_type_get_policy:
         case em_bus_event_type_scan_result:
+        case em_bus_event_type_get_mld_config:
             handle_get_dm_data(evt);
             break;
 
@@ -445,6 +462,11 @@ void em_ctrl_t::handle_bus_event(em_bus_event_t *evt)
 		case em_bus_event_type_sta_assoc:
 			handle_sta_assoc_event(evt);
 			break;
+
+        case em_bus_event_type_mld_reconfig:
+			handle_mld_reconfig(evt);
+			break;
+	
 	
         default:
             break;
@@ -480,6 +502,10 @@ int em_ctrl_t::data_model_init(const char *data_model_path)
     }
 
     intf = m_data_model.get_ctrl_al_interface((char *)global_netid);
+	if (intf == NULL) {
+		printf("%s:%d: data model init failed could not find netid\n", __func__, __LINE__);
+		return 0;
+	}
     dm_easy_mesh_t::macbytes_to_string((unsigned char *)intf->mac, mac_str);
 
     if ((dm = get_data_model(global_netid, intf->mac)) == NULL) {
@@ -510,11 +536,14 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
     em_freq_band_t band;
     dm_easy_mesh_t *dm;
     em_t *em = NULL;
-    em_radio_id_t ruid;
+    mac_address_t ruid;
     bssid_t	bssid;
     dm_bss_t *bss;
     em_profile_type_t profile;
-    mac_addr_str_t mac_str1, mac_str2;
+    em_long_string_t key;
+    unsigned int i;
+    bool found;
+    mac_addr_str_t mac_str1, mac_str2, dev_mac_str, radio_mac_str, bss_mac_str;
 
     assert(len > ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))));
     if (len < ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)))) {
@@ -545,7 +574,7 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
                 if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)), len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_profile(&profile) == false) {
                     profile = em_profile_type_1;
                 }
-                dm = create_data_model((const char *)global_netid, (const unsigned char *)intf.mac, profile);
+                dm = create_data_model((const char *)global_netid, (const em_interface_t *)&intf, profile);
                 printf("%s:%d: Created data model for mac: %s net: %s\n", __func__, __LINE__, mac_str1, global_netid);
             } else {
                 dm_easy_mesh_t::macbytes_to_string(dm->get_agent_al_interface_mac(), mac_str1);
@@ -609,12 +638,29 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
                 return NULL;
             }
 
-            dm_easy_mesh_t::macbytes_to_string(bssid, mac_str1);
+            if ((dm = get_data_model((const char *)global_netid, (const unsigned char *)hdr->src)) == NULL) {
+                printf("%s:%d: Can not find data model\n", __func__, __LINE__);
+            }
+            for (i = 0; i < dm->get_num_radios(); i++) {
+                found = true;
+                dm_easy_mesh_t::macbytes_to_string((unsigned char *)dm->get_radio_info(i)->id.dev_mac, dev_mac_str);
+                dm_easy_mesh_t::macbytes_to_string((unsigned char *)dm->get_radio_info(i)->id.ruid, radio_mac_str);
+                dm_easy_mesh_t::macbytes_to_string(bssid, mac_str1);
+    
+                snprintf(key, sizeof (em_long_string_t), "%s@%s@%s@%s@", dm->get_radio_info(i)->id.net_id, dev_mac_str, radio_mac_str, mac_str1);
 
-            if ((bss = m_data_model.get_bss(mac_str1)) == NULL) {
+                if ((bss = m_data_model.get_bss(key)) == NULL) {
+                    found = false;
+                    continue;
+                }
+                break;
+            }
+
+            if (found == false) {
                 printf("%s:%d: Could not find bss:%s from data model\n", __func__, __LINE__, mac_str1);
                 return NULL;
             }
+              
             dm_easy_mesh_t::macbytes_to_string(bss->m_bss_info.ruid.mac, mac_str1);
             if ((em = (em_t *)hash_map_get(m_em_map, mac_str1)) == NULL) {
                 printf("%s:%d: Could not find radio:%s\n", __func__, __LINE__, mac_str1);
@@ -630,10 +676,12 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
         case em_msg_type_channel_sel_req:
         case em_msg_type_client_cap_query:
         case em_msg_type_assoc_sta_link_metrics_query:
+        case em_msg_type_beacon_metrics_query:
         case em_msg_type_client_steering_req:
         case em_msg_type_client_assoc_ctrl_req:
         case em_msg_type_map_policy_config_req:
         case em_msg_type_channel_scan_req:
+        case em_msg_type_ap_mld_config_req:
 			break;
 
 		case em_msg_type_channel_scan_rprt:
@@ -661,7 +709,27 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
             break;
 
         case em_msg_type_client_steering_btm_rprt:
+            em = (em_t *)hash_map_get_first(m_em_map);
+            while(em != NULL) {
+                if ((em->is_al_interface_em() == false) && (em->has_at_least_one_associated_sta() == true)) {
+                    break;
+                }
+                em = (em_t *)hash_map_get_next(m_em_map, em);
+            }
+            break;
+
+        case em_msg_type_ap_mld_config_resp:
         case em_msg_type_1905_ack:
+            em = (em_t *)hash_map_get_first(m_em_map);
+            while(em != NULL) {
+                if ((em->is_al_interface_em() == false)) {
+                    break;
+                }
+                em = (em_t *)hash_map_get_next(m_em_map, em);
+            }
+            break;
+
+        case em_msg_type_beacon_metrics_rsp:
             em = (em_t *)hash_map_get_first(m_em_map);
             while(em != NULL) {
                 if ((em->is_al_interface_em() == false) && (em->has_at_least_one_associated_sta() == true)) {
@@ -689,6 +757,45 @@ void em_ctrl_t::io(void *data, bool input)
 void em_ctrl_t::start_complete()
 {
 	dm_easy_mesh_t *dm;
+	wifi_bus_desc_t *desc;
+	raw_data_t raw;
+	em_interface_t	*intf;
+	mac_addr_str_t	al_mac_str;
+	em_bus_event_type_cfg_renew_params_t ac_config_raw;
+	mac_address_t null_mac = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+	if (m_data_model.is_initialized() == false) {
+		printf("%s:%d: Database not initialized ... needs reset\n", __func__, __LINE__);
+		return;
+	}
+
+    bus_init(&m_bus_hdl);
+        
+    if((desc = get_bus_descriptor()) == NULL) {
+        printf("%s:%d descriptor is null\n", __func__, __LINE__);
+    }
+
+    if (desc->bus_open_fn(&m_bus_hdl, "EasyMesh_Ctrl_Service") != 0) {
+        printf("%s:%d bus open failed\n",__func__, __LINE__);
+        return;
+    }
+
+	intf = m_data_model.get_ctrl_al_interface((char *)global_netid);
+	assert(intf != NULL);
+
+	dm_easy_mesh_t::macbytes_to_string(intf->mac, al_mac_str);
+	raw.data_type    = bus_data_type_string;
+   	raw.raw_data.bytes   = al_mac_str;
+   	raw.raw_data_len = strlen(al_mac_str);
+
+   	if (desc->bus_set_fn(&m_bus_hdl, "Device.WiFi.Ctrl.CollocateAgentID", &raw)== 0) {
+       	printf("%s:%d Collocated Agent ID: %s publish successfull\n",__func__, __LINE__, al_mac_str);
+   	} else {
+       	printf("%s:%d Collocated agent ID: %s publish  fail\n",__func__, __LINE__, al_mac_str);
+   	}
+
+	// build initial network topology
+	init_network_topology();
 
     dm = m_data_model.get_first_dm();
     while (dm != NULL) {
@@ -696,11 +803,10 @@ void em_ctrl_t::start_complete()
 		dm->set_db_cfg_param(db_cfg_type_sta_list_delete, "");
 		dm->set_db_cfg_param(db_cfg_type_op_class_list_delete, "");
 		dm->set_db_cfg_param(db_cfg_type_bss_list_delete, "");
-		dm->set_db_cfg_param(db_cfg_type_radio_list_delete, "");
         dm = m_data_model.get_next_dm(dm);
     }
-
-	io_process(em_bus_event_type_cfg_renew, (unsigned char *)NULL, 0);	
+	memcpy(&ac_config_raw.radio, &null_mac, sizeof(mac_address_t));
+	io_process(em_bus_event_type_cfg_renew, (unsigned char *)&ac_config_raw, sizeof(em_bus_event_type_cfg_renew_params_t));
 }
 
 
@@ -723,3 +829,7 @@ int main(int argc, const char *argv[])
     return 0;
 }
 
+void wifi_util_print(wifi_log_level_t level, wifi_dbg_type_t module, char *format, ...)
+{
+
+}

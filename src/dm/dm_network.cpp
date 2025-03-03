@@ -89,6 +89,16 @@ int dm_network_t::decode(const cJSON *obj, void *parent_id)
         dm_easy_mesh_t::string_to_macbytes(mac_str, m_net_info.colocated_agent_id.mac);
 	}
 
+    if ((tmp = cJSON_GetObjectItem(obj, "MediaType")) != NULL) {
+		if (strncmp(cJSON_GetStringValue(tmp), "Wireless", strlen("Wireless")) == 0) { 
+			m_net_info.media = em_media_type_ieee80211b_24;
+		} else if (strncmp(cJSON_GetStringValue(tmp), "Ethernet", strlen("Ethernet")) == 0) {
+			m_net_info.media = em_media_type_ieee8023ab;
+		} else {
+			m_net_info.media = em_media_type_ieee80211b_24;
+		}
+	}
+
     return 0;
 }
 
@@ -96,7 +106,7 @@ void dm_network_t::encode(cJSON *obj, bool summary)
 {
     mac_addr_str_t  mac_str;
     unsigned short i;
-
+	em_string_t	str;
 
     cJSON_AddStringToObject(obj, "ID", m_net_info.id);
 
@@ -125,6 +135,16 @@ void dm_network_t::encode(cJSON *obj, bool summary)
 
     dm_easy_mesh_t::macbytes_to_string(m_net_info.colocated_agent_id.mac, mac_str);
     cJSON_AddStringToObject(obj, "CollocatedAgentID", mac_str);
+	
+	if (m_net_info.media == em_media_type_ieee8023ab) {
+		strncpy(str, "Ethernet", strlen("Ethernet") + 1);
+	} else if (m_net_info.media == em_media_type_ieee80211b_24) {
+		strncpy(str, "Wireless", strlen("Wireless") + 1);
+	} else {
+		strncpy(str, "Unknown", strlen("Unknown") + 1);
+
+	}
+    cJSON_AddStringToObject(obj, "MediaType", str);
 }
 
 bool dm_network_t::operator == (const dm_network_t& obj)
@@ -154,16 +174,17 @@ bool dm_network_t::operator == (const dm_network_t& obj)
 
 void dm_network_t::operator = (const dm_network_t& obj)
 {
+    if (this == &obj) { return; }
     memcpy(&this->m_net_info.id,&obj.m_net_info.id,sizeof(em_long_string_t));
     this->m_net_info.num_of_devices = obj.m_net_info.num_of_devices;
     strncpy(this->m_net_info.timestamp, obj.m_net_info.timestamp, strlen(obj.m_net_info.timestamp) + 1);
     memcpy(&this->m_net_info.ctrl_id.mac ,&obj.m_net_info.ctrl_id.mac,sizeof(mac_address_t));
     memcpy(&this->m_net_info.ctrl_id.name,&obj.m_net_info.ctrl_id.name,sizeof(em_interface_name_t));
-    this->m_net_info.num_mscs_disallowed_sta == obj.m_net_info.num_mscs_disallowed_sta;
+    this->m_net_info.num_mscs_disallowed_sta = obj.m_net_info.num_mscs_disallowed_sta;
     for (int i = 0; i < this->m_net_info.num_mscs_disallowed_sta; i++) {
         memcpy(&this->m_net_info.mscs_disallowed_sta[i], &obj.m_net_info.mscs_disallowed_sta[i], sizeof(em_string_t));
     }
-    this->m_net_info.num_scs_disallowed_sta == obj.m_net_info.num_scs_disallowed_sta;
+    this->m_net_info.num_scs_disallowed_sta = obj.m_net_info.num_scs_disallowed_sta;
     for (int i = 0; i < this->m_net_info.num_scs_disallowed_sta; i++) {
         memcpy(&this->m_net_info.scs_disallowed_sta[i], &obj.m_net_info.scs_disallowed_sta[i], sizeof(em_string_t));
     }
@@ -175,7 +196,7 @@ int dm_network_t::init()
 {
 	char date_time[EM_DATE_TIME_BUFF_SZ];
 
-	get_date_time_rfc3399(date_time, EM_DATE_TIME_BUFF_SZ);
+	util::get_date_time_rfc3399(date_time, EM_DATE_TIME_BUFF_SZ);
 
 	memset(&m_net_info, 0, sizeof(em_network_info_t)); 
 	strncpy(m_net_info.timestamp, date_time, strlen(date_time) + 1);
@@ -194,7 +215,7 @@ dm_network_t::dm_network_t(const dm_network_t& net)
 
 dm_network_t::dm_network_t()
 {
-
+    memset(&m_net_info, 0, sizeof(em_network_info_t));
 }
 
 dm_network_t::~dm_network_t()

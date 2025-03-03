@@ -71,6 +71,8 @@ em_cmd_params_t spec_params[] = {
 	{.u = {.args = {2, {"", "", "", "", ""}, "Policy"}}},
 	{.u = {.args = {2, {"", "", "", "", ""}, "Policy.json"}}},
 	{.u = {.args = {2, {"", "", "", "", ""}, "ScanResult"}}},
+    {.u = {.args = {2, {"", "", "", "", ""}, "MLDConfig"}}},
+    {.u = {.args = {2, {"", "", "", "", ""}, "MLDReconfig"}}},
 	{.u = {.args = {0, {"", "", "", "", ""}, "max"}}},
 };
 
@@ -102,7 +104,9 @@ em_cmd_t em_cmd_cli_t::m_client_cmd_spec[] = {
     em_cmd_t(em_cmd_type_client_cap_query, spec_params[22]),
     em_cmd_t(em_cmd_type_get_policy, spec_params[23]),
     em_cmd_t(em_cmd_type_set_policy, spec_params[24]),
-    em_cmd_t(em_cmd_type_max, spec_params[25]),
+    em_cmd_t(em_cmd_type_get_mld_config, spec_params[26]),
+    em_cmd_t(em_cmd_type_mld_reconfig, spec_params[27]),
+    em_cmd_t(em_cmd_type_max, spec_params[28]),
 };
 
 int em_cmd_cli_t::get_edited_node(em_network_node_t *node, const char *header, char *buff)
@@ -357,17 +361,16 @@ int em_cmd_cli_t::execute(char *result)
             break;
 
         case em_cmd_type_set_policy:
-			snprintf(in, sizeof(in), "get_policy %s", m_cmd.m_param.u.args.args[1]);
-			if ((node = m_cli.exec(in, strlen(in), NULL)) == NULL) {
-				return -1;
-			}
+            if ((node = m_cmd.m_param.net_node) == NULL) {
+                return -1;
+            }
             bevt->type = em_bus_event_type_set_policy;
             info = &bevt->u.subdoc;
             strncpy(info->name, param->u.args.fixed_args, strlen(param->u.args.fixed_args) + 1);
-			if ((bevt->data_len = get_edited_node(node, "SetPolicy", info->buff)) < 0) {
+            if ((bevt->data_len = get_edited_node(node, "SetPolicy", info->buff)) < 0) {
                 printf("%s:%d: failed to open file at location:%s error:%d\n", __func__, __LINE__, param->u.args.fixed_args, errno);
-                return -1;
-			}	
+            return -1;
+            }	
             break;
 
         case em_cmd_type_get_bss:
@@ -436,6 +439,18 @@ int em_cmd_cli_t::execute(char *result)
                 param->u.args.fixed_args, errno);
                 return -1;
             }
+            break;
+
+        case em_cmd_type_get_mld_config:
+            bevt->type = em_bus_event_type_get_mld_config;
+            info = &bevt->u.subdoc;
+            strncpy(info->name, param->u.args.fixed_args, strlen(param->u.args.fixed_args) + 1);
+            break;
+
+        case em_cmd_type_mld_reconfig:
+            bevt->type = em_bus_event_type_mld_reconfig;
+            info = &bevt->u.subdoc;
+            snprintf(info->name, sizeof(info->name), "%s", param->u.args.fixed_args);
             break;
 
         default:

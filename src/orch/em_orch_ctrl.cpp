@@ -161,8 +161,17 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_fini(em_cmd_t *pcmd, em_t *em)
             if (em->get_state() == em_state_ctrl_configured) {
                 return true;
             }
+			break;
+
+        case em_cmd_type_mld_reconfig:
+            if (em->get_state() == em_state_ctrl_ap_mld_configured) {
+                em->set_state(em_state_ctrl_configured);
+                return true;
+            }
 
 			break;
+        case em_cmd_type_start_dpp:
+            return true;
     }
 
     return false;
@@ -173,8 +182,9 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_exec(em_cmd_t *pcmd, em_t *em)
     switch (pcmd->m_type) {
         case em_cmd_type_set_ssid:
         case em_cmd_type_set_radio:
+        case em_cmd_type_mld_reconfig:
+        case em_cmd_type_start_dpp:
             return true;
-            break;
 
         case em_cmd_type_em_config:
         case em_cmd_type_cfg_renew:
@@ -232,7 +242,6 @@ void em_orch_ctrl_t::pre_process_cancel(em_cmd_t *pcmd, em_t *em)
            	em->set_state(em_state_ctrl_misconfigured);
             em->set_topo_query_tx_count(0);
             em->set_channel_pref_query_tx_count(0);
-
 			// send cfg renew so that controller can orchestrate renew
 			ev.type = em_event_type_bus;
     		bev = &ev.u.bevt;
@@ -258,6 +267,8 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
     dm_easy_mesh_t *mgr_dm;
     mac_addr_str_t	mac_str;
     em_commit_target_t config;
+	mac_address_t radio_mac, dev_mac;
+	em_short_string_t criteria;
 
     //printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
     switch (pcmd->get_orch_op()) {
@@ -309,7 +320,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 
 		case dm_orch_type_dm_delete:
 			printf("%s:%d: Deleting data model\n", __func__, __LINE__);
-			m_mgr->delete_data_model((dm->get_device())->m_device_info.net_id, (dm->get_device())->m_device_info.id.mac);
+			m_mgr->delete_data_model((dm->get_device())->m_device_info.id.net_id, (dm->get_device())->m_device_info.id.dev_mac);
 			break;
 
 		case dm_orch_type_dm_delete_all:
@@ -321,11 +332,38 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
         case dm_orch_type_em_test:
         case dm_orch_type_sta_cap:
         case dm_orch_type_sta_link_metrics:
+        case dm_orch_type_mld_reconfig:
             break;  
 
         case dm_orch_type_net_ssid_update:
             m_mgr->load_net_ssid_table();
             break;  
+
+		case dm_orch_type_bss_delete:
+			if (pcmd->get_type() != em_cmd_type_em_config) {
+				break;
+			}
+			if (pcmd->m_param.u.args.num_args != 2) {
+				break;
+			}	
+			dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], radio_mac);
+			dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[1], dev_mac);
+			
+			mgr_dm = m_mgr->get_data_model(global_netid, dev_mac);
+            if (mgr_dm == NULL) {
+                break;
+            }		
+			snprintf(criteria, sizeof(em_short_string_t), "radio=%s", pcmd->m_param.u.args.args[0]);
+			mgr_dm->set_db_cfg_param(db_cfg_type_bss_list_delete, criteria);
+			break;
+
+		case dm_orch_type_topo_update:
+			if (pcmd->get_type() != em_cmd_type_em_config) {
+				break;
+			}
+
+			m_mgr->update_network_topology();
+			break;
 
         default:
             break;
@@ -385,14 +423,19 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
                 break;
 
             case em_cmd_type_cfg_renew:
-				// check if the radio is null mac
+		dm = pcmd->get_data_model();
+                dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], dm->m_radio[0].m_radio_info.intf.mac);
+		// check if the radio is null mac
                 dm = pcmd->get_data_model();
-				if (memcmp(null_mac, dm->m_radio[0].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
-					queue_push(pcmd->m_em_candidates, em);
-                    count++;
-				} else if (memcmp(em->get_radio_interface_mac(), dm->m_radio[0].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
-                    queue_push(pcmd->m_em_candidates, em);
-                    count++;
+		if ((memcmp(null_mac, dm->m_radio[0].m_radio_info.intf.mac, sizeof(mac_address_t)) == 0) &&  (em->is_al_interface_em() == false)) {
+			printf("%s:%d push to queue since null mac \n", __func__, __LINE__);	
+			queue_push(pcmd->m_em_candidates, em);
+                	count++;
+		} else if (memcmp(em->get_radio_interface_mac(), dm->m_radio[0].m_radio_info.intf.mac, sizeof(mac_address_t)) == 0) {
+			dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
+			printf("%s:%d Auto config renew %s push to queue since mac matches\n", __func__, __LINE__,mac_str);
+			queue_push(pcmd->m_em_candidates, em);
+			count++;
                 }
                 break;
 
@@ -460,7 +503,7 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
 			case em_cmd_type_set_radio:
 				dm = pcmd->get_data_model();
 				for (i = 0; i < dm->get_num_radios(); i++) {
-					if (memcmp(em->get_radio_interface_mac(), dm->m_radio[i].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
+					if (memcmp(em->get_radio_interface_mac(), dm->m_radio[i].m_radio_info.intf.mac, sizeof(mac_address_t)) == 0) {
 						dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), mac_str);
 						//printf("%s:%d: em: %s pushed for command: em_cmd_type_set_policy\n", __func__, __LINE__, mac_str);
                         queue_push(pcmd->m_em_candidates, em);
@@ -469,6 +512,20 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
 					}
 				}
 				break;
+
+            case em_cmd_type_mld_reconfig:
+                if (em->is_al_interface_em()) {
+                    queue_push(pcmd->m_em_candidates, em);
+                    count++;
+                }
+                break;
+            case em_cmd_type_start_dpp:
+                if (em->is_al_interface_em()) {
+                    // TODO: Add additional checks for provisioning state or more if needed 
+                    queue_push(pcmd->m_em_candidates, em);
+                    count++;
+                }
+                break;
 
             default:
                 break;

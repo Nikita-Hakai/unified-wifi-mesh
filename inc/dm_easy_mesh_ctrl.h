@@ -34,6 +34,7 @@
 #include "dm_dpp.h"
 #include "db_client.h"
 #include "dm_easy_mesh_list.h"
+#include "em_network_topo.h"
 
 class em_cmd_t;
 class dm_easy_mesh_t;
@@ -48,8 +49,10 @@ class dm_easy_mesh_ctrl_t :
 
     db_client_t m_db_client;
     bool	m_initialized;
+    bool	m_network_initialized;
 
     dm_easy_mesh_list_t	m_data_model_list;
+	em_network_topo_t   *m_topology;
 
     int set_device_list(cJSON *dev_list_obj);
     int set_radio_list(cJSON *radio_list_obj, mac_address_t *dev_mac);
@@ -62,6 +65,8 @@ public:
 
     bool    is_initialized() { return m_initialized; }
     void	set_initialized() { m_initialized = true; }
+    bool    is_network_initialized() { return m_network_initialized; }
+    void	set_network_initialized() { m_network_initialized = true; }
 
     //int analyze_network_ssid_list(em_bus_event_t *evt, em_cmd_t *cmd[]);
     int analyze_sta_link_metrics(em_cmd_t *pcmd[]);
@@ -88,8 +93,13 @@ public:
     int analyze_radio_metrics_req(em_cmd_t *cmd[]);
     int analyze_ap_metrics_req(em_cmd_t *cmd[]);
     int analyze_client_metrics_req(em_cmd_t *cmd[]);
+    int analyze_mld_reconfig(em_cmd_t *pcmd[]);
 
     int reset_config();
+
+    using dm_scan_result_list_t::set_config;
+    using dm_scan_result_list_t::get_config;
+
     int get_sta_config(cJSON *parent, char *key, em_get_sta_list_reason_t reason = em_get_sta_list_reason_none);
     int get_bss_config(cJSON *parent, char *key);
     int get_network_config(cJSON *parent, char *key);
@@ -99,15 +109,16 @@ public:
     int get_channel_config(cJSON *parent, char *key, em_get_channel_list_reason_t reason = em_get_channel_list_reason_none);
     int get_policy_config(cJSON *parent, char *key);
     int get_scan_result(cJSON *parent, char *key);
+    int get_mld_config(cJSON *parent, char *key);
     int get_reference_config(cJSON *parent, char *key);
-    int get_config(em_long_string_t net_id, em_subdoc_info_t *subdoc);
+    void get_config(em_long_string_t net_id, em_subdoc_info_t *subdoc);
     int set_config(dm_easy_mesh_t *dm);
     int copy_config(dm_easy_mesh_t *dm, em_long_string_t net_id);
 
     em_interface_t *get_ctrl_al_interface(em_long_string_t net_id) { return dm_network_list_t::get_ctrl_al_interface(net_id); }
 
     dm_easy_mesh_t	*get_data_model(const char *net_id, const unsigned char *al_mac);   
-    dm_easy_mesh_t	*create_data_model(const char *net_id, const unsigned char *al_mac, em_profile_type_t profile);    
+    dm_easy_mesh_t	*create_data_model(const char *net_id, const em_interface_t *al_intf, em_profile_type_t profile);    
 
 	dm_easy_mesh_t *get_first_dm() { return m_data_model_list.get_first_dm(); }
 	dm_easy_mesh_t *get_next_dm(dm_easy_mesh_t *dm) { return m_data_model_list.get_next_dm(dm); }
@@ -167,6 +178,9 @@ public:
     dm_scan_result_t *get_scan_result(const char *key) { return m_data_model_list.get_scan_result(key); }
     void remove_scan_result(const char *key) { m_data_model_list.remove_scan_result(key); }
     void put_scan_result(const char *key, const dm_scan_result_t *scan_result) { m_data_model_list.put_scan_result(key, scan_result); }
+
+	void init_network_topology();
+    void update_network_topology();
 
     void handle_dirty_dm();
     void init_tables();

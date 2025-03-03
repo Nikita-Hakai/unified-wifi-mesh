@@ -30,8 +30,8 @@ class dm_radio_cap_list_t : public dm_radio_cap_t, public db_easy_mesh_t {
 public:
     int init();
 
-    dm_radio_cap_t *get_first() { return (dm_radio_cap_t *)hash_map_get_first(m_list); }
-    dm_radio_cap_t  *get_next(dm_radio_cap_t *radio_cap) { return (dm_radio_cap_t *)hash_map_get_next(m_list, radio_cap); }
+    dm_radio_cap_t *get_first() { return static_cast<dm_radio_cap_t *>(hash_map_get_first(m_list)); }
+    dm_radio_cap_t  *get_next(dm_radio_cap_t *radio_cap) { return static_cast<dm_radio_cap_t *>(hash_map_get_next(m_list, radio_cap)); }
 
     dm_orch_type_t get_dm_orch_type(db_client_t& db_client, const dm_radio_cap_t& radio_cap);
     void update_list(const dm_radio_cap_t& radio_cap, dm_orch_type_t op);
@@ -40,7 +40,7 @@ public:
     void init_table();
     void init_columns();
     int sync_db(db_client_t& db_client, void *ctx);
-    int update_db(db_client_t& db_client, dm_orch_type_t op, void *data = NULL);
+    int update_db(db_client_t& db_client, dm_orch_type_t op, void *data);
     bool search_db(db_client_t& db_client, void *ctx, void *key);
     bool operator == (const db_easy_mesh_t& obj);
     int set_config(db_client_t& db_client, const cJSON *obj, void *parent_id);

@@ -443,10 +443,29 @@ short em_steering_t::create_btm_request_tlv(unsigned char *buff, em_steering_req
     unsigned char *tmp = buff;
     mac_addr_str_t mac_str;
 
-    // Calculate the offset for sta_mac_addr
+/*     // Calculate the offset for sta_mac_addr
     size_t offset_sta_mac_addr = sizeof(bssid_t) + (sizeof(unsigned char) * 2) + (sizeof(unsigned short) * 2);
     // Calculate the offset for bss_list (assuming it follows sta_mac_addr)
-    size_t offset_bss_list = offset_sta_mac_addr + (sizeof(mac_address_t) * req->sta_list_count);
+    size_t offset_bss_list = offset_sta_mac_addr + (sizeof(mac_address_t) * req->sta_list_count); */
+    memcpy(&req->bssid, get_data_model()->m_bss[0].m_bss_info.bssid.mac, sizeof(bssid_t));
+    req->req_mode                           = params->request_mode;
+    req->btm_dissoc_imminent                = params->disassoc_imminent;
+    req->btm_abridged                       = params->btm_abridged;
+    req->btm_link_removal_imminent = params->link_removal_imminent;
+    if(params->request_mode == 1)
+    {
+        //ignore this
+    req->steering_opportunity_window        = 0;
+    } else {
+        req->steering_opportunity_window    = params->steer_opportunity_win;
+    }
+    req->btm_dissoc_timer                   = htons(params->btm_disassociation_timer);
+    req->sta_list_count                     = 1;
+    memcpy(req->sta_mac_addr, params->sta_mac, sizeof(mac_addr_t));
+    req->target_bssid_list_count            = 1;
+    memcpy(req->target_bssids, params->target, sizeof(mac_addr_t));
+    req->target_bss_op_class                = params->target_op_class;;
+    req->target_bss_channel_num             = params->target_channel;
 
     memcpy(&preq->agile_multiband, req, length);
     tmp += offset_sta_mac_addr;

@@ -32,6 +32,7 @@ class em_configuration_t {
     int create_autoconfig_wsc_m1_msg(unsigned char *buff, unsigned char *dst);
     int create_autoconfig_wsc_m2_msg(unsigned char *buff, em_haul_type_t haul_type[], unsigned int num_hauls);
     int	create_operational_bss_tlv(unsigned char *buff);
+    int create_operational_bss_tlv_topology(unsigned char *buff);
     int	create_bss_config_rprt_tlv(unsigned char *buff);
     int create_device_info_type_tlv(unsigned char *buff);
     short create_client_assoc_event_tlv(unsigned char *buff, mac_address_t sta, bssid_t bssid, bool assoc);
@@ -39,13 +40,15 @@ class em_configuration_t {
     int create_bsta_mld_config_tlv(unsigned char *buff);
     int create_assoc_sta_mld_config_report_tlv(unsigned char *buff);
     int create_tid_to_link_map_policy_tlv(unsigned char *buff);
+    short create_eht_operations_tlv(unsigned char *buff);
 
     int send_topology_response_msg(unsigned char *dst);
     int send_topology_notification_by_client(mac_address_t sta, bssid_t bssid, bool assoc);
-    int send_ap_mld_config_req_msg(unsigned char *buff);
-    int send_ap_mld_config_resp_msg(unsigned char *buff);
     int send_bsta_mld_config_req_msg(unsigned char *buff);
     int send_bsta_mld_config_resp_msg(unsigned char *buff);
+    int send_ap_mld_config_req_msg();
+    int send_ap_mld_config_resp_msg(unsigned char *dst);
+    int send_1905_ack_message(mac_addr_t sta_mac);
     
     int handle_autoconfig_resp(unsigned char *buff, unsigned int len);
     int handle_autoconfig_search(unsigned char *buff, unsigned int len);
@@ -61,11 +64,19 @@ class em_configuration_t {
 	int handle_ap_operational_bss(unsigned char *buff, unsigned int len);
     int handle_bss_configuration_report(unsigned char *buff, unsigned int len);
     int handle_bsta_mld_config_req(unsigned char *buff, unsigned int len);
+    int handle_ack_msg(unsigned char *buff, unsigned int len);
+    int handle_ap_mld_config_tlv(unsigned char *buff, unsigned int len);
+    int handle_eht_operations_tlv(unsigned char *buff);
+    int handle_ap_mld_config_req(unsigned char *buff, unsigned int len);
+    int handle_ap_mld_config_resp(unsigned char *buff, unsigned int len);
+	void handle_ap_vendor_operational_bss(unsigned char *value, unsigned int len);
 
     short create_m1_msg(unsigned char *buff);
     short create_m2_msg(unsigned char *buff, em_haul_type_t haul_type);
     short create_traffic_separation_policy(unsigned char *buff);
-   
+    short create_error_code_tlv(unsigned char *buff, int val, mac_addr_t sta_mac);
+  	int create_vendor_operational_bss_tlv(unsigned char *buff);
+ 
     // state handlers 
     void handle_state_config_none();
     void handle_state_autoconfig_rsp_pending();
@@ -173,7 +184,7 @@ public:
     int compute_secret(unsigned char **secret, unsigned short *secret_len, 
         unsigned char *remote_pub, unsigned short pub_len, 
         unsigned char *local_priv, unsigned short priv_len) { 
-            return em_crypto_t::platform_compute_shared_secret(secret, secret_len, remote_pub, pub_len, local_priv, priv_len); 
+            return em_crypto_t::platform_compute_shared_secret(secret, secret_len, remote_pub, pub_len, local_priv, static_cast<uint8_t>(priv_len));
     }
 
     int compute_digest(unsigned char num, unsigned char **addr, unsigned int *len, unsigned char *digest) {
@@ -196,9 +207,10 @@ public:
     //void test_topology_response_msg() { send_topology_response_msg(); }
     void print_ap_operational_bss_tlv(unsigned char *value, unsigned int len);
 	void print_bss_configuration_report_tlv(unsigned char *value, unsigned int len);
-    int get_renew_tx_count() { return m_renew_tx_cnt; }
+	void print_ap_vendor_operational_bss_tlv(unsigned char *value, unsigned int len);
+    int get_renew_tx_count() { return static_cast<int>(m_renew_tx_cnt); }
     void set_renew_tx_count(unsigned int cnt) { m_renew_tx_cnt = cnt; }
-    int get_topo_query_tx_count() { return m_topo_query_tx_cnt; }
+    int get_topo_query_tx_count() { return static_cast<int>(m_topo_query_tx_cnt); }
     void set_topo_query_tx_count(unsigned int cnt) { m_topo_query_tx_cnt = cnt; }
     static unsigned short msg_id;
 
@@ -210,7 +222,7 @@ public:
     unsigned int m_topo_query_tx_cnt;
 
     em_configuration_t();
-    ~em_configuration_t();
+    virtual ~em_configuration_t();
 
 };
 

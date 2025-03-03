@@ -34,7 +34,7 @@ class dm_easy_mesh_list_t {
 public:
 
     dm_easy_mesh_t *get_data_model(const char *net_id, const unsigned char *al_mac);
-    dm_easy_mesh_t *create_data_model(const char *net_id, const unsigned char *al_mac, em_profile_type_t profile, bool colocated_dm = false);
+    dm_easy_mesh_t *create_data_model(const char *net_id, const em_interface_t *al_intf, em_profile_type_t profile, bool colocated_dm = false);
     void delete_data_model(const char *net_id, const unsigned char *al_mac);
     void delete_all_data_models();
 
@@ -42,8 +42,8 @@ public:
 
     void init(em_mgr_t *mgr);
 
-    dm_easy_mesh_t *get_first_dm() { return (dm_easy_mesh_t *)hash_map_get_first(m_list); }
-    dm_easy_mesh_t *get_next_dm(dm_easy_mesh_t *dm) { return (dm_easy_mesh_t *)hash_map_get_next(m_list, dm); }
+    dm_easy_mesh_t *get_first_dm() { return static_cast<dm_easy_mesh_t *>(hash_map_get_first(m_list)); }
+    dm_easy_mesh_t *get_next_dm(dm_easy_mesh_t *dm) { return static_cast<dm_easy_mesh_t *>(hash_map_get_next(m_list, dm)); }
 
     dm_network_t *get_first_network();
     dm_network_t *get_next_network(dm_network_t *net);

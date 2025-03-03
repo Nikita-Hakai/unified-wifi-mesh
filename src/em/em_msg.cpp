@@ -138,6 +138,7 @@ bool em_msg_t::get_radio_id(mac_address_t *mac)
     em_ap_vht_cap_t *rd_vht_cap;
     em_ap_he_cap_t *rd_he_cap;
     em_ap_op_bss_t  *ap;
+    
 	em_ap_op_bss_radio_t    *radio;
 
     tlv = (em_tlv_t *)m_buff; len = m_len;
@@ -200,7 +201,6 @@ bool em_msg_t::get_radio_id(mac_address_t *mac)
     }
 
     return false;
-
 }
 
 bool em_msg_t::get_freq_band(em_freq_band_t *band)
@@ -258,6 +258,46 @@ em_tlv_t *em_msg_t::get_tlv(em_tlv_type_t type)
     return NULL;
 }
 
+unsigned char* em_msg_t::add_buff_element(unsigned char *buff, unsigned int *len, unsigned char *element, unsigned int element_len)
+{
+    memcpy(buff, element, element_len);
+    *len += element_len;
+    return buff + element_len;
+}
+
+unsigned char* em_msg_t::add_tlv(unsigned char *buff, unsigned int *len, em_tlv_type_t tlv_type, 
+                                            unsigned char *value, unsigned int value_len)
+{
+    em_tlv_t* tlv = (em_tlv_t *)buff;
+    tlv->type = tlv_type;
+    tlv->len = htons(value_len);
+    if (value_len > 0) {
+        memcpy(tlv->value, value, value_len);
+    }
+
+    *len += (sizeof(em_tlv_t) + value_len);
+    return buff + (sizeof(em_tlv_t) + value_len);
+    
+}
+unsigned char* em_msg_t::add_1905_header(unsigned char *buff, unsigned int *len, mac_addr_t dst, mac_addr_t src, em_msg_type_t msg_type)
+{
+
+    uint16_t type = htons(ETH_P_1905);
+    uint16_t  msg_id = msg_type;
+
+    unsigned char* tmp = buff;
+    tmp = em_msg_t::add_buff_element(tmp, len, (uint8_t *)dst, sizeof(mac_address_t));
+    tmp = em_msg_t::add_buff_element(tmp, len, (uint8_t *)src, sizeof(mac_address_t));
+    tmp = em_msg_t::add_buff_element(tmp, len, (uint8_t *)&type, sizeof(uint16_t));
+
+    em_cmdu_t cmdu = {
+        .type = htons(msg_id),
+        .id = htons(msg_id),
+        .last_frag_ind = 1
+    };
+
+    return em_msg_t::add_buff_element(tmp, len, (uint8_t *)&cmdu, sizeof(em_cmdu_t));    
+}
 unsigned int em_msg_t::validate(char *errors[])
 {
     em_tlv_t *tlv;
@@ -727,7 +767,7 @@ void em_msg_t::bh_sta_cap_rprt()
 }
 void em_msg_t::proxied_encap_dpp()
 {
-    m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_encap_dpp, (m_profile > em_profile_type_2) ? mandatory:bad, "17.2.79 of Wi-Fi Easy Mesh 5.0", 12);
+    m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_1905_encap_dpp, (m_profile > em_profile_type_2) ? mandatory:bad, "17.2.79 of Wi-Fi Easy Mesh 5.0", 12);
     m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_dpp_chirp_value, (m_profile > em_profile_type_2) ? optional:bad, "17.2.83 of Wi-Fi Easy Mesh 5.0", 4);
 }
 void em_msg_t::direct_encap_dpp()
@@ -742,6 +782,16 @@ void em_msg_t::reconfig_trigger()
 void em_msg_t::cac_req()
 {
     m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_cac_req, mandatory, "17.2.42 of Wi-Fi Easy Mesh 5.0", 12);
+}
+
+void em_msg_t::ap_mld_config_req()
+{
+    m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_ap_mld_config, mandatory, "17.2.96 of Wi-Fi Easy Mesh 6.0", 4);
+}
+
+void em_msg_t::ap_mld_config_rsp()
+{
+    m_tlv_member[m_num_tlv++] = em_tlv_member_t(em_tlv_type_ap_mld_config, mandatory, "17.2.96 of Wi-Fi Easy Mesh 6.0", 4);
 }
 
 void em_msg_t::i1905_ack()
@@ -1036,6 +1086,14 @@ em_msg_t::em_msg_t(em_msg_type_t type, em_profile_type_t profile, unsigned char 
 
         case em_msg_type_cac_req:
             cac_req();
+            break;
+
+        case em_msg_type_ap_mld_config_req:
+            ap_mld_config_req();
+            break;
+        
+        case em_msg_type_ap_mld_config_resp:
+            ap_mld_config_rsp();
             break;
 
         case em_msg_type_1905_ack:

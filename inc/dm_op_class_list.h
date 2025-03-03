@@ -36,13 +36,13 @@ public:
     void init_table();
     void init_columns();
     int sync_db(db_client_t& db_client, void *ctx);
-    int update_db(db_client_t& db_client, dm_orch_type_t op, void *data = NULL);
+    int update_db(db_client_t& db_client, dm_orch_type_t op, void *data);
     bool search_db(db_client_t& db_client, void *ctx, void *key);
     bool operator == (const db_easy_mesh_t& obj);
     int set_config(db_client_t& db_client, const cJSON *obj, void *parent_id);
     int set_config(db_client_t& db_client, dm_op_class_t& op_class, void *parent_id);
     int get_config(cJSON *obj, void *parent_id, bool summary = false);
-    int get_config(cJSON *obj, em_op_class_type_t type);
+    void get_config(cJSON *obj, em_op_class_type_t type);
 
     virtual dm_op_class_t *get_first_op_class() = 0;
     virtual dm_op_class_t *get_next_op_class(dm_op_class_t *op_class) = 0;

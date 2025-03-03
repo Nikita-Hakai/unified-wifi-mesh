@@ -32,6 +32,10 @@ INCLUDEDIRS = \
 	-I$(ONEWIFI_HAL_INTF_HOME) \
 	-I$(ONEWIFI_HOME)/source/utils \
 	-I$(ONEWIFI_HOME)/include \
+	-I$(ONEWIFI_HOME)/source/platform/linux \
+	-I$(ONEWIFI_HOME)/source/platform/common \
+    -I$(ONEWIFI_HOME)/source/platform/linux/he_bus/inc \
+	-I$(ONEWIFI_HOME)/source/ccsp \
     -I$(RBUS_HOME)/include \
 	-I$(WIFI_CJSON) \
 
@@ -41,13 +45,13 @@ LDFLAGS = $(LIBDIRS) $(LIBS)
 LIBDIRS = \
 	-L$(INSTALLDIR)/lib \
 
-LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline
+LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto
 
 GENERIC_SOURCES = $(ONEWIFI_HOME)/source/utils/collection.c	\
-    $(ONEWIFI_EM_SRC)/utils/util.c \
 
 CLI_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/cli/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/cmd/*.cpp) \
+    $(wildcard $(ONEWIFI_EM_SRC)/em/crypto/*.cpp) \
     $(ONEWIFI_EM_SRC)/dm/dm_device.cpp \
     $(ONEWIFI_EM_SRC)/dm/dm_ieee_1905_security.cpp \
     $(ONEWIFI_EM_SRC)/dm/dm_easy_mesh.cpp \
@@ -67,6 +71,7 @@ CLI_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/cli/*.cpp) \
     $(ONEWIFI_EM_SRC)/dm/dm_assoc_sta_mld.cpp \
     $(ONEWIFI_EM_SRC)/dm/dm_tid_to_link.cpp \
     $(ONEWIFI_EM_SRC)/em/em_net_node.cpp \
+    $(ONEWIFI_EM_SRC)/utils/util.cpp \
 
 MAIN_SOURCE = $(ONEWIFI_EM_SRC)/cli/main.c
 
@@ -90,7 +95,7 @@ $(MAIN_OBJECT): %.o: %.c
 	$(CXX) $(CFLAGS) -o $@ -c $<
 
 $(PROGRAM):
-	go build -o $(PROGRAM) $(ONEWIFI_EM_SRC)/cli/*.go
+	go build -ldflags="-extldflags '-L$(INSTALLDIR)/lib -lcrypto -lssl -luuid'" -o $(PROGRAM) $(ONEWIFI_EM_SRC)/cli/*.go
 
 # Clean target: "make -f Makefile.Linux clean" to remove unwanted objects and executables.
 #
@@ -100,10 +105,10 @@ clean:
 
 #
 # Run target: "make -f Makefile.Linux run" to execute the application
-#             You will need to add $(VARIABLE_NAME) for any command line parameters 
+#             You will need to add $(RUNARGS) for any command line parameters
 #             that you defined earlier in this file.
 # 
 
 run:
-	./$(PROGRAM) 
+	LD_LIBRARY_PATH=$(INSTALLDIR)/lib $(PROGRAM) $(RUNARGS)
 

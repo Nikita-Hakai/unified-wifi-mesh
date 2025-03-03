@@ -45,6 +45,10 @@ class em_t;
 class dm_easy_mesh_t {
 public:
     webconfig_subdoc_data_t m_wifi_data;
+	unsigned int m_num_preferences;
+	em_interface_preference_t	m_preference[EM_MAX_PLATFORMS];
+	unsigned int	m_num_interfaces;
+	em_interface_t	m_interfaces[EM_MAX_INTERFACES];
     dm_network_t    m_network;
     dm_device_t     m_device;
     dm_ieee_1905_security_t m_ieee_1905_security;
@@ -61,8 +65,7 @@ public:
     dm_op_class_t m_op_class[EM_MAX_OPCLASS];
 	unsigned int	m_num_policy;
 	dm_policy_t	m_policy[EM_MAX_POLICIES];
-	unsigned int	m_num_scan_results;
-	dm_scan_result_t	m_scan_result[EM_MAX_SCAN_RESULTS];
+	hash_map_t		*m_scan_result_map = NULL;
     hash_map_t  	*m_sta_map = NULL;
     hash_map_t      *m_sta_assoc_map = NULL;
     hash_map_t      *m_sta_dassoc_map = NULL;
@@ -73,15 +76,17 @@ public:
     bool    m_colocated;
     unsigned int    m_num_ap_mld;
     dm_ap_mld_t     m_ap_mld[EM_MAX_AP_MLD];
-    dm_bsta_mld_t   m_bsta_mld;
-    dm_assoc_sta_mld_t m_assoc_sta_mld;
+    unsigned int    m_num_bsta_mld;
+    dm_bsta_mld_t   m_bsta_mld[EM_MAX_BSTA_MLD];
+    unsigned int    m_num_assoc_sta_mld;
+    dm_assoc_sta_mld_t m_assoc_sta_mld[EM_MAX_ASSOC_STA_MLD];
     dm_tid_to_link_t m_tid_to_link;
 
 public:
 	static em_e4_table_t m_e4_table[];
 	static em_freq_band_t get_freq_band_by_op_class(int op_class);
 	em_bss_info_t *get_bss_info_with_mac(mac_address_t mac);
-	static em_bss_info_t *get_bss_info_with_mac(void *dm, mac_address_t mac) { return ((dm_easy_mesh_t *)dm)->get_bss_info_with_mac(mac); }
+	static em_bss_info_t *get_bss_info_with_mac(void *dm, mac_address_t mac) { return (static_cast<dm_easy_mesh_t *>(dm))->get_bss_info_with_mac(mac); }
     virtual int analyze_dev_init(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     int analyze_radio_config(em_bus_event_t *evt, em_cmd_t *pcmd[]);
     int analyze_vap_config(em_bus_event_t *evt, em_cmd_t *pcmd[]);
@@ -121,7 +126,9 @@ public:
     unsigned char *get_ctrl_al_interface_mac() { return m_network.get_colocated_agent_interface_mac(); }
     char *get_ctrl_al_interface_name() { return m_network.get_colocated_agent_interface_name(); }
     void set_ctrl_al_interface_mac(unsigned char *mac) { m_network.set_colocated_agent_interface_mac(mac); }
-    void set_ctrl_al_interface_name(char *name) { return m_network.set_colocated_agent_interface_name(name); }
+    void set_ctrl_al_interface_name(char *name) { m_network.set_colocated_agent_interface_name(name); }
+	void set_controller_id(unsigned char *mac) { m_network.set_controller_id(mac); }
+	void set_controller_intf_media(em_media_type_t media) { m_network.set_controller_intf_media(media); }
 
     em_interface_t *get_agent_al_interface() { return m_device.get_dev_interface(); }
     unsigned char *get_agent_al_interface_mac() { return m_device.get_dev_interface_mac(); }
@@ -133,17 +140,20 @@ public:
 
     em_interface_t *get_controller_interface() { return m_network.get_controller_interface(); }
     unsigned char *get_controller_interface_mac() { return m_network.get_controller_interface_mac(); }
-    static em_ieee_1905_security_info_t *get_ieee_1905_security_info(void *dm) { return ((dm_easy_mesh_t *)dm)->get_ieee_1905_security_info(); }
+    static em_ieee_1905_security_info_t *get_ieee_1905_security_info(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_ieee_1905_security_info(); }
     em_ieee_1905_security_info_t *get_ieee_1905_security_info() { return m_ieee_1905_security.get_ieee_1905_security_info(); }
     em_ieee_1905_security_cap_t *get_ieee_1905_security_cap() { return m_ieee_1905_security.get_ieee_1905_security_cap(); }
     em_device_info_t *get_device_info() { return m_device.get_device_info(); }
-    static em_device_info_t *get_device_info(void *dm) { return ((dm_easy_mesh_t *)dm)->get_device_info(); }
+    static em_device_info_t *get_device_info(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_device_info(); }
     
     dm_network_t *get_network() { return &m_network; }
     dm_network_t& get_network_by_ref() { return m_network; }
     em_network_info_t *get_network_info() { return m_network.get_network_info(); }
-    static em_network_info_t *get_network_info(void *dm) { return ((dm_easy_mesh_t *)dm)->get_network_info(); }
+    static em_network_info_t *get_network_info(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_network_info(); }
     unsigned char *get_ctl_mac() { return m_network.get_controller_interface_mac();}
+
+	em_interface_t *get_interface_by_index(unsigned int index) { return &m_interfaces[index]; }
+	em_interface_t *get_prioritized_interface(const char *platform);
 
     dm_device_t *get_device() { return &m_device; }
     dm_device_t& get_device_by_ref() { return m_device; }
@@ -156,44 +166,52 @@ public:
     dm_network_ssid_t& get_network_ssid_by_ref(unsigned int index) { return m_network_ssid[index]; }
     em_network_ssid_info_t *get_network_ssid_info_by_haul_type(em_haul_type_t haul_type);
 
-    em_bss_info_t *get_bss_info(unsigned int index) { return m_bss[index].get_bss_info(); }
-    static em_bss_info_t *get_bss_info(void *dm, unsigned int index) { return ((dm_easy_mesh_t *)dm)->get_bss_info(index); }
-    em_op_class_info_t *get_op_class_info(unsigned int index) { return m_op_class[index].get_op_class_info(); }
-    static em_op_class_info_t *get_op_class_info(void *dm, unsigned int index) { return ((dm_easy_mesh_t *)dm)->get_op_class_info(index); }
-
+	em_op_class_info_t *get_op_class_info(unsigned int index) { return m_op_class[index].get_op_class_info(); }
+    static em_op_class_info_t *get_op_class_info(void *dm, unsigned int index) { return (static_cast<dm_easy_mesh_t *>(dm))->get_op_class_info(index); }
     unsigned int get_num_op_class() { return m_num_opclass; }
-    static unsigned int get_num_op_class(void *dm) { return ((dm_easy_mesh_t *)dm)->get_num_op_class(); }
+    static unsigned int get_num_op_class(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_op_class(); }
     void set_num_op_class(unsigned int num) { m_num_opclass = num; }
-    static void set_num_op_class(void *dm, unsigned int num) { ((dm_easy_mesh_t *)dm)->set_num_op_class(num); }
+    static void set_num_op_class(void *dm, unsigned int num) { (static_cast<dm_easy_mesh_t *>(dm))->set_num_op_class(num); }
     dm_op_class_t *get_op_class(unsigned int index) { return &m_op_class[index]; }
     dm_op_class_t& get_op_class_by_ref(unsigned int index) { return m_op_class[index]; }
 	static void print_op_class_list(dm_easy_mesh_t *dm);
 
+    em_bss_info_t *get_bss_info(unsigned int index) { return m_bss[index].get_bss_info(); }
+    static em_bss_info_t *get_bss_info(void *dm, unsigned int index) { return (static_cast<dm_easy_mesh_t *>(dm))->get_bss_info(index); }
     unsigned int get_num_bss() { return m_num_bss; }
-    static unsigned int get_num_bss(void *dm) { return ((dm_easy_mesh_t *)dm)->get_num_bss(); }
+    static unsigned int get_num_bss(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_bss(); }
     void set_num_bss(unsigned int num) { m_num_bss = num; }
-    static void set_num_bss(void *dm, unsigned int num) { ((dm_easy_mesh_t *)dm)->set_num_bss(num); }
+    static void set_num_bss(void *dm, unsigned int num) { (static_cast<dm_easy_mesh_t *>(dm))->set_num_bss(num); }
     dm_bss_t *get_bss(unsigned int index) { return &m_bss[index]; }
     dm_bss_t *get_bss(mac_address_t radio, mac_address_t bss);
     dm_bss_t& get_bss_by_ref(unsigned int index) { return m_bss[index]; }
+	void remove_bss_by_index(unsigned int index);
+	dm_bss_t *find_matching_bss(em_bss_id_t *id);
 
 	unsigned int get_num_policy() { return m_num_policy; }
 	void set_num_policy(unsigned int num) { m_num_policy = num; }
 	dm_policy_t *get_policy(unsigned int index) { return &m_policy[index]; }
     dm_policy_t& get_policy_by_ref(unsigned int index) { return m_policy[index]; }
 
-	unsigned int get_num_scan_results() { return m_num_scan_results; }
-	void set_num_scan_results(unsigned int num) { m_num_scan_results = num; }
-	dm_scan_result_t *get_scan_result(unsigned int index) { return &m_scan_result[index]; }
-    dm_scan_result_t& get_scan_result_by_ref(unsigned int index) { return m_scan_result[index]; }
 	dm_scan_result_t *find_matching_scan_result(em_scan_result_id_t *id);
+	dm_scan_result_t *create_new_scan_result(em_scan_result_id_t *id);
+	unsigned int	get_num_scan_results() { return hash_map_count(m_scan_result_map); }
+	dm_scan_result_t *get_scan_result(unsigned int index);
+    void update_scan_results(em_scan_result_t *scan_result);
+    static void update_scan_results(void *dm, em_scan_result_t *scan_result) { ((dm_easy_mesh_t *)dm)->update_scan_results(scan_result); }
 
     unsigned int get_num_ap_mld() { return m_num_ap_mld; }
-    static unsigned int get_num_ap_mld(void *dm) { return ((dm_easy_mesh_t *)dm)->get_num_ap_mld(); }
+    static unsigned int get_num_ap_mld(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_ap_mld(); }
     void set_num_ap_mld(unsigned int num) { m_num_ap_mld = num; }
-    static void set_num_ap_mld(void *dm, unsigned int num) { ((dm_easy_mesh_t *)dm)->set_num_ap_mld(num); }
+    static void set_num_ap_mld(void *dm, unsigned int num) { (static_cast<dm_easy_mesh_t *>(dm))->set_num_ap_mld(num); }
     dm_ap_mld_t *get_ap_mld(unsigned int index) { return &m_ap_mld[index]; }
     dm_ap_mld_t& get_ap_mld_by_ref(unsigned int index) { return m_ap_mld[index]; }
+
+    unsigned int get_num_bsta_mld() { return m_num_bsta_mld; }
+    static unsigned int get_num_bsta_mld(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_bsta_mld(); }
+
+    unsigned int get_num_assoc_sta_mld() { return m_num_assoc_sta_mld; }
+    static unsigned int get_num_assoc_sta_mld(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_assoc_sta_mld(); }
 
     dm_dpp_t *get_dpp() { return &m_dpp; }
 
@@ -202,12 +220,12 @@ public:
     dm_radio_t *get_radio(mac_address_t mac);
     em_interface_t *get_radio_interface(unsigned int index) { return m_radio[index].get_radio_interface(); }
     em_radio_info_t *get_radio_info(unsigned int index) { return m_radio[index].get_radio_info(); }
-    static em_radio_info_t *get_radio_info(void *dm, unsigned int index) { return ((dm_easy_mesh_t *)dm)->get_radio_info(index); }
+    static em_radio_info_t *get_radio_info(void *dm, unsigned int index) { return (static_cast<dm_easy_mesh_t *>(dm))->get_radio_info(index); }
     rdk_wifi_radio_t    *get_radio_data(em_interface_t *radio);
     unsigned int get_num_radios() { return m_num_radios; }
-    static unsigned int get_num_radios(void *dm) { return ((dm_easy_mesh_t *)dm)->get_num_radios(); }
+    static unsigned int get_num_radios(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_radios(); }
     void set_num_radios(unsigned int num) { m_num_radios = num; }
-    static void set_num_radios(void *dm, unsigned int num) { ((dm_easy_mesh_t *)dm)->set_num_radios(num); }
+    static void set_num_radios(void *dm, unsigned int num) { (static_cast<dm_easy_mesh_t *>(dm))->set_num_radios(num); }
     dm_radio_t *find_matching_radio(dm_radio_t *radio);
     dm_radio_cap_t *get_radio_cap(mac_address_t mac);
 
@@ -236,10 +254,10 @@ public:
     em_sta_info_t *get_next_sta_info(em_sta_info_t *info, em_target_sta_map_t target);
     em_sta_info_t *get_sta_info(mac_address_t sta, bssid_t bssid, mac_address_t ruid, em_target_sta_map_t target);
     void put_sta_info(em_sta_info_t *info, em_target_sta_map_t target);
-    static em_sta_info_t *get_first_sta_info(void *dm, em_target_sta_map_t target) { return ((dm_easy_mesh_t *)dm)->get_first_sta_info(target); }
-    static em_sta_info_t *get_next_sta_info(void *dm, em_sta_info_t *info, em_target_sta_map_t target) { return ((dm_easy_mesh_t *)dm)->get_first_sta_info(info, target); }
-    static em_sta_info_t *get_sta_info(void *dm, mac_address_t sta, bssid_t bssid, mac_address_t ruid, em_target_sta_map_t target) { return ((dm_easy_mesh_t *)dm)->get_sta_info(sta, bssid, ruid, target); }
-    static void put_sta_info(void *dm, em_sta_info_t *info, em_target_sta_map_t target) { ((dm_easy_mesh_t *)dm)->put_sta_info(info, target); }
+    static em_sta_info_t *get_first_sta_info(void *dm, em_target_sta_map_t target) { return (static_cast<dm_easy_mesh_t *>(dm))->get_first_sta_info(target); }
+    static em_sta_info_t *get_next_sta_info(void *dm, em_sta_info_t *info, em_target_sta_map_t target) { return (static_cast<dm_easy_mesh_t *>(dm))->get_first_sta_info(info, target); }
+    static em_sta_info_t *get_sta_info(void *dm, mac_address_t sta, bssid_t bssid, mac_address_t ruid, em_target_sta_map_t target) { return (static_cast<dm_easy_mesh_t *>(dm))->get_sta_info(sta, bssid, ruid, target); }
+    static void put_sta_info(void *dm, em_sta_info_t *info, em_target_sta_map_t target) { (static_cast<dm_easy_mesh_t *>(dm))->put_sta_info(info, target); }
 
     dm_sta_t *find_sta(mac_address_t sta_mac, bssid_t bssid);
     dm_sta_t *get_first_sta(mac_address_t sta_mac);
@@ -247,13 +265,13 @@ public:
     bool has_at_least_one_associated_sta();
     int get_num_bss_for_associated_sta(mac_address_t sta_mac);
     
-    static void print_hex_dump(unsigned int length, unsigned char *buffer);
     static char *hex(unsigned int in_len, unsigned char *in, unsigned int out_len, char *out);
     static unsigned char *unhex(unsigned int in_len, char *in, unsigned int out_len, unsigned char *out);
     static char *macbytes_to_string(mac_address_t mac, char* string);
     static void string_to_macbytes (char *key, mac_address_t bmac);
     static int mac_address_from_name(const char *ifname, mac_address_t mac);
     static int name_from_mac_address(const mac_address_t *mac, char *ifname);
+	static int get_interfaces_list(em_interface_t interfaces[], unsigned int *num_interfaces);
     static void securitymode_to_str(unsigned short mode, char *sec_mode_str, int len);
 	static void str_to_securitymode(unsigned short *mode, char *sec_mode_str, int len);
 
@@ -265,7 +283,8 @@ public:
 
     void set_db_cfg_param(db_cfg_type_t type, char *param);
 	void reset_db_cfg_type(db_cfg_type_t type);
-	bool db_cfg_type_is_set(db_cfg_type_t type) { return m_db_cfg_param.db_cfg_type & type; }
+	bool db_cfg_type_is_set(db_cfg_type_t type) { return m_db_cfg_param.db_cfg_type & static_cast<unsigned int>(type); }
+	char *db_cfg_type_get_criteria(db_cfg_type_t type);
 	bool db_cfg_type_is_set() { return m_db_cfg_param.db_cfg_type > 0; }
 
     void handle_dirty_dm();

@@ -41,8 +41,8 @@ INCLUDEDIRS = \
 
 $(info The value of VARIABLE is $(ONEWIFI_HAL_INTF_HOME))
 
-CXXFLAGS = $(INCLUDEDIRS) -g -DEASY_MESH_NODE
-LDFLAGS = $(LIBDIRS) $(LIBS) 
+CXXFLAGS += $(INCLUDEDIRS) -g -DEASY_MESH_NODE -Wall -Wextra -Wpointer-arith -Wcast-qual -Wcast-align -Wstrict-aliasing -fno-common -Wctor-dtor-privacy -Wold-style-cast -Woverloaded-virtual -Wsign-promo -Wstrict-null-sentinel -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -pie -ftrapv -Wformat=2 -Wformat-security -Wuninitialized -Winit-self -Wconversion -Wsign-conversion -Weffc++ -Wno-unused-parameter -std=c++11 -fsanitize=address -fsanitize=undefined #-Werror -O2
+LDFLAGS += $(LIBDIRS) $(LIBS) -fsanitize=address -fsanitize=undefined
 LIBDIRS = \
 	-L$(INSTALLDIR)/lib \
     -L$(ONEWIFI_HOME)/install/lib/
@@ -51,13 +51,13 @@ LIBS = -lm -lpthread -ldl -lcjson -luuid -lssl -lcrypto -lwebconfig -lhebus
 
 GENERIC_SOURCES = $(ONEWIFI_HOME)/source/utils/collection.c \
     $(ONEWIFI_EM_SRC)/util_crypto/aes_siv.c \
-    $(ONEWIFI_EM_SRC)/utils/util.c \
     $(ONEWIFI_HOME)/lib/common/util.c \
     $(ONEWIFI_HOME)/source/platform/linux/bus.c \
 
 AGENT_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/em/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/em/config/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/em/prov/*.cpp) \
+	$(wildcard $(ONEWIFI_EM_SRC)/em/prov/easyconnect/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/em/disc/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/em/channel/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/em/capability/*.cpp) \
@@ -87,6 +87,7 @@ AGENT_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/em/*.cpp) \
     $(ONEWIFI_EM_SRC)/dm/dm_bsta_mld.cpp \
     $(ONEWIFI_EM_SRC)/dm/dm_assoc_sta_mld.cpp \
     $(ONEWIFI_EM_SRC)/dm/dm_tid_to_link.cpp \
+    $(ONEWIFI_EM_SRC)/utils/util.cpp \
 
 AGENT_OBJECTS = $(AGENT_SOURCES:.cpp=.o)
 GENERIC_OBJECTS = $(GENERIC_SOURCES:.c=.o) 

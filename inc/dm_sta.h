@@ -30,17 +30,19 @@ public:
     em_sta_info_t *get_sta_info() { return &m_sta_info; }
     int decode(const cJSON *obj, void *parent_id);
     void encode(cJSON *obj, em_get_sta_list_reason_t reson = em_get_sta_list_reason_none);
+	void encode_beacon_report(cJSON *obj);
 
     bool operator == (const dm_sta_t& obj);
     void operator = (const dm_sta_t& obj);
 
     static void parse_sta_bss_radio_from_key(const char *key, mac_address_t sta, bssid_t bssid, mac_address_t radio);
     static void decode_sta_capability(dm_sta_t *sta);
+    static void decode_beacon_report(dm_sta_t *sta);
 
     dm_sta_t(em_sta_info_t *sta);
     dm_sta_t(const dm_sta_t& sta);
     dm_sta_t();
-    ~dm_sta_t();
+    virtual ~dm_sta_t();
 };
 
 #endif

@@ -57,7 +57,7 @@ short em_channel_t::create_channel_pref_tlv_agent(unsigned char *buff)
 
     dm = get_data_model();
     pref = (em_channel_pref_t *)buff;
-    memcpy(pref->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(pref->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
     pref_op_class = pref->op_classes;
     pref->op_classes_num = 0;
 
@@ -66,7 +66,7 @@ short em_channel_t::create_channel_pref_tlv_agent(unsigned char *buff)
 
     for (i = 0; i < dm->m_num_opclass; i++) {
 	op_class = &dm->m_op_class[i];
-	if (((memcmp(op_class->m_op_class_info.id.ruid, get_radio_interface_mac(), sizeof(em_radio_id_t)) == 0) &&
+	if (((memcmp(op_class->m_op_class_info.id.ruid, get_radio_interface_mac(), sizeof(mac_address_t)) == 0) &&
                                         (op_class->m_op_class_info.id.type == em_op_class_type_capability)) == false) {
 	    continue;
         }
@@ -151,7 +151,7 @@ short em_channel_t::create_channel_pref_tlv(unsigned char *buff)
 
     dm = get_data_model();
     pref = (em_channel_pref_t *)buff;
-    memcpy(pref->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(pref->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
     pref_op_class = pref->op_classes;
     pref->op_classes_num = 0;
     device = dm->get_device_info();
@@ -161,7 +161,7 @@ short em_channel_t::create_channel_pref_tlv(unsigned char *buff)
 
     for (i = 0; i < dm->m_num_opclass; i++) {
         op_class = &dm->m_op_class[i];
-        if (((memcmp(op_class->m_op_class_info.id.ruid, device->id.mac, sizeof(em_radio_id_t)) == 0)     &&
+        if (((memcmp(op_class->m_op_class_info.id.ruid, device->intf.mac, sizeof(mac_address_t)) == 0)     &&
                     (op_class->m_op_class_info.id.type == em_op_class_type_anticipated)) == false) {
             continue;
         }
@@ -193,7 +193,7 @@ short em_channel_t::create_transmit_power_limit_tlv(unsigned char *buff)
     em_tx_power_limit_t	*tx_power_limit;
 
     tx_power_limit = (em_tx_power_limit_t *)buff;
-    memcpy(tx_power_limit->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(tx_power_limit->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
     
     dm_radio_t* radio = get_data_model()->get_radio(get_radio_interface_mac());
     em_radio_info_t* radio_info = radio->get_radio_info();
@@ -286,13 +286,13 @@ short em_channel_t::create_channel_scan_res_tlv(unsigned char *buff, unsigned in
 	em_channel_scan_result_t *res = (em_channel_scan_result_t *)buff;
 
     dm = get_data_model();
-	scan_res = &dm->m_scan_result[index];
+	scan_res = dm->get_scan_result(index);
 
-	memcpy(res->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));	
+	memcpy(res->ruid, get_radio_interface_mac(), sizeof(mac_address_t));	
 	memcpy(&res->op_class, &scan_res->m_scan_result.id.op_class, sizeof(unsigned char));
 	memcpy(&res->channel, &scan_res->m_scan_result.id.channel, sizeof(unsigned char));
 	res->scan_status = scan_res->m_scan_result.scan_status;
-	get_date_time_rfc3399(date_time, sizeof(date_time));
+	util::get_date_time_rfc3399(date_time, sizeof(date_time));
 	memcpy(res->timestamp, date_time, strlen(date_time) + 1);
 	res->timestamp_len = strlen(date_time);	
 	
@@ -466,7 +466,7 @@ int em_channel_t::send_channel_scan_report_msg(unsigned int *last_index)
     // One Timestamp TLV (see section 17.2.41).
     tlv = (em_tlv_t *)tmp;
     tlv->type = em_tlv_type_timestamp;
-	get_date_time_rfc3399(date_time, sizeof(date_time));
+	util::get_date_time_rfc3399(date_time, sizeof(date_time));
 	sz = strlen(date_time) + 1;
 	time_len = strlen(date_time);
 	memcpy(tlv->value, &time_len, sizeof(unsigned char));
@@ -477,7 +477,7 @@ int em_channel_t::send_channel_scan_report_msg(unsigned int *last_index)
     len += (sizeof(em_tlv_t) + sz);
 
     // One or more Channel Scan Result TLVs (see section 17.2.40).
-	for (i = start_idx; i < dm->m_num_scan_results; i++) {
+	for (i = start_idx; i < dm->get_num_scan_results(); i++) {
     	tlv = (em_tlv_t *)tmp;
     	tlv->type = em_tlv_type_channel_scan_rslt;
     	sz = create_channel_scan_res_tlv(tlv->value, i);
@@ -524,7 +524,7 @@ short em_channel_t::create_spatial_reuse_req_tlv(unsigned char *buff)
     em_spatial_reuse_req_t *spatial_reuse_req;
 
     spatial_reuse_req = (em_spatial_reuse_req_t *)buff;
-    memcpy(spatial_reuse_req->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(spatial_reuse_req->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 
     dm_radio_t *radio = get_data_model()->get_radio(get_radio_interface_mac());
     em_radio_info_t *radio_info = radio->get_radio_info();
@@ -731,7 +731,7 @@ int em_channel_t::send_channel_sel_response_msg(em_chan_sel_resp_code_type_t cod
     tlv->type = em_tlv_type_channel_sel_resp;
     tlv->len = htons(sizeof(em_channel_sel_rsp_t));
     resp = (em_channel_sel_rsp_t *)tlv->value;
-    memcpy(resp->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(resp->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
     memcpy(&resp->response_code, (unsigned char *)&code, sizeof(unsigned char));
 
     tmp += (sizeof(em_tlv_t) + sizeof(em_channel_sel_rsp_t));
@@ -742,7 +742,7 @@ int em_channel_t::send_channel_sel_response_msg(em_chan_sel_resp_code_type_t cod
 	tlv->type = em_tlv_type_spatial_reuse_cfg_rsp;
 	tlv->len = htons(sizeof(em_spatial_reuse_cfg_rsp_t));
 	resp = (em_channel_sel_rsp_t *)tlv->value;
-	memcpy(resp->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+	memcpy(resp->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
     memcpy(&resp->response_code, (unsigned char *)&code, sizeof(unsigned char));
 
 
@@ -793,14 +793,14 @@ short em_channel_t::create_operating_channel_report_tlv(unsigned char *buff)
 	dm = get_data_model();
 
 	rprt_op_class = (em_op_channel_rprt_t *)buff;
-	memcpy(rprt_op_class->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+	memcpy(rprt_op_class->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 	rprt_op_class->op_classes_num = 0;
 	rprt_channel = rprt_op_class->op_classes;
 	len += sizeof(em_op_channel_rprt_t);
 
 	for (i = 0; i < dm->m_num_opclass; i++) {
 		op_class = &dm->m_op_class[i];
-		if ((memcmp(op_class->m_op_class_info.id.ruid, rprt_op_class->ruid, sizeof(em_radio_id_t)) == 0)	&&
+		if ((memcmp(op_class->m_op_class_info.id.ruid, rprt_op_class->ruid, sizeof(mac_address_t)) == 0)	&&
 			(op_class->m_op_class_info.id.type == em_op_class_type_current)) {
 		
 			tmp = (unsigned char *)rprt_channel;
@@ -832,7 +832,7 @@ short em_channel_t::create_spatial_reuse_report_tlv(unsigned char *buff)
     dm = get_data_model();
 
     rprt_spatial_reuse = (em_spatial_reuse_rprt_t *)buff;
-    memcpy(rprt_spatial_reuse->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(rprt_spatial_reuse->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 
     dm_radio_t *radio = dm->get_radio(get_radio_interface_mac());
     em_radio_info_t *radio_info = radio->get_radio_info();
@@ -866,6 +866,7 @@ int em_channel_t::send_operating_channel_report_msg()
     unsigned char *tmp = buff;
     dm_easy_mesh_t *dm;
     unsigned short type = htons(ETH_P_1905);
+    mac_addr_str_t mac_str;
 
     dm = get_data_model();
 
@@ -935,7 +936,8 @@ int em_channel_t::send_operating_channel_report_msg()
         printf("%s:%d:  Operating Channel Report msg failed, error:%d\n", __func__, __LINE__, errno);
         return -1;
     }
-
+    dm_easy_mesh_t::macbytes_to_string(get_radio_interface_mac(), mac_str);
+    printf("%s:%d Operating Channel Report msg send for %s \n", __func__, __LINE__,mac_str);
     return len;
 
 }
@@ -1024,10 +1026,10 @@ short em_channel_t::create_cac_status_report_tlv(unsigned char *buff)
 	em_cac_status_rprt_active_t *rprt_active;
 	em_cac_active_t *active;
 	unsigned char *tmp = buff;
-	em_radio_id_t ruid;
+	mac_address_t ruid;
 
 	dm = get_data_model();
-	memcpy(ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+	memcpy(ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 
 	rprt_avail = (em_cac_status_rprt_avail_t *)tmp;
 	rprt_avail->avail_num = 0;
@@ -1037,7 +1039,7 @@ short em_channel_t::create_cac_status_report_tlv(unsigned char *buff)
 
 	for (i = 0; i < dm->m_num_opclass; i++) {
 		op_class = &dm->m_op_class[i];
-		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(em_radio_id_t)) == 0)	&&
+		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(mac_address_t)) == 0)	&&
 			(op_class->m_op_class_info.id.type == em_op_class_type_cac_available)) {
 		
 			avail->op_class = op_class->m_op_class_info.op_class;
@@ -1061,7 +1063,7 @@ short em_channel_t::create_cac_status_report_tlv(unsigned char *buff)
 
 	for (i = 0; i < dm->m_num_opclass; i++) {
 		op_class = &dm->m_op_class[i];
-		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(em_radio_id_t)) == 0)	&&
+		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(mac_address_t)) == 0)	&&
 			(op_class->m_op_class_info.id.type == em_op_class_type_cac_non_occ)) {
 		
 			non_occ->op_class = op_class->m_op_class_info.op_class;
@@ -1085,7 +1087,7 @@ short em_channel_t::create_cac_status_report_tlv(unsigned char *buff)
 
 	for (i = 0; i < dm->m_num_opclass; i++) {
 		op_class = &dm->m_op_class[i];
-		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(em_radio_id_t)) == 0)	&&
+		if ((memcmp(op_class->m_op_class_info.id.ruid, ruid, sizeof(mac_address_t)) == 0)	&&
 			(op_class->m_op_class_info.id.type == em_op_class_type_cac_active)) {
 		
 			active->op_class = op_class->m_op_class_info.op_class;
@@ -1124,7 +1126,7 @@ short em_channel_t::create_cac_complete_report_tlv(unsigned char *buff)
 
 	comp = &dm->m_cac_comp;
 
-	memcpy(cac_comp_radio->ruid, comp->m_cac_comp_info.ruid, sizeof(em_radio_id_t));
+	memcpy(cac_comp_radio->ruid, comp->m_cac_comp_info.ruid, sizeof(mac_address_t));
 	cac_comp_radio->op_class = comp->m_cac_comp_info.op_class;
 	cac_comp_radio->channel = comp->m_cac_comp_info.channel;
 	cac_comp_radio->status = comp->m_cac_comp_info.status;
@@ -1159,14 +1161,14 @@ short em_channel_t::create_radio_op_restriction_tlv(unsigned char *buff)
 
 	op_rest = (em_radio_op_restriction_t *)buff;
 
-    memcpy(op_rest->ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+    memcpy(op_rest->ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 	op_rest->op_classes_num = 0;
 	op_class_rest = op_rest->op_classes;
 	len += sizeof(em_radio_op_restriction_t);
 
 	for (i = 0; i < dm->m_num_opclass; i++) {
 		op_class = &dm->m_op_class[i];
-		if ((memcmp(op_class->m_op_class_info.id.ruid, op_rest->ruid, sizeof(em_radio_id_t)) == 0)	&&
+		if ((memcmp(op_class->m_op_class_info.id.ruid, op_rest->ruid, sizeof(mac_address_t)) == 0)	&&
 			(op_class->m_op_class_info.id.type == em_op_class_type_capability)) {
 
 			op_class_rest->op_class = op_class->m_op_class_info.op_class;
@@ -1210,7 +1212,7 @@ int em_channel_t::send_channel_pref_report_msg()
     tmp += sizeof(mac_address_t);
     len += sizeof(mac_address_t);
 
-    memcpy(tmp, get_radio_interface_mac(), sizeof(mac_address_t));
+    memcpy(tmp, dm->get_agent_al_interface_mac(), sizeof(mac_address_t));
     tmp += sizeof(mac_address_t);
     len += sizeof(mac_address_t);
 
@@ -1391,7 +1393,7 @@ int em_channel_t::handle_op_channel_report(unsigned char *buff, unsigned int len
 
     for (i = 0; i < dm->m_num_opclass; i++) {
         op_class_info = &dm->m_op_class[i].m_op_class_info;
-        if (((memcmp(op_class_info->id.ruid, get_radio_interface_mac(), sizeof(em_radio_id_t)) == 0) &&
+        if (((memcmp(op_class_info->id.ruid, get_radio_interface_mac(), sizeof(mac_address_t)) == 0) &&
                     (op_class_info->id.type == em_op_class_type_current)) == true) {
             op_class_info->op_class = (unsigned int) rpt->op_classes[0].op_class;
             op_class_info->channel = (unsigned int) rpt->op_classes[0].channel;
@@ -1454,7 +1456,7 @@ int em_channel_t::handle_channel_pref_tlv_ctrl(unsigned char *buff, unsigned int
 	channel_pref = pref->op_classes;
 	memcpy(op_class_info[i].id.ruid, pref->ruid, sizeof(mac_address_t));
 	for (i = 0; i < pref->op_classes_num; i++) {
-		memcpy(op_class_info[i].id.ruid, device->id.mac, sizeof(mac_address_t));
+		memcpy(op_class_info[i].id.ruid, device->intf.mac, sizeof(mac_address_t));
 		op_class_info[i].id.type = em_op_class_type_preference;
 		op_class_info[i].op_class = (unsigned int)channel_pref->op_class;
 		op_class_info[i].id.op_class = op_class_info[i].op_class;
@@ -1514,7 +1516,8 @@ int em_channel_t::handle_eht_operations_tlv_ctrl(unsigned char *buff, unsigned i
     tmp_len += sizeof(unsigned char);
 
     dm = get_data_model();
-    assert(num_radios == dm->get_num_radios());
+//  Remove assert since channnel report is per radio
+//  assert(num_radios == dm->get_num_radios());
 
     for (i = 0; i < num_radios; i++) {
         memcpy(&ruid, tmp, sizeof(mac_address_t));
@@ -1522,7 +1525,7 @@ int em_channel_t::handle_eht_operations_tlv_ctrl(unsigned char *buff, unsigned i
         tmp_len += sizeof(mac_address_t);
 
         for (j = 0; j < dm->get_num_radios(); j++) {
-            if (memcmp(ruid, dm->m_radio[j].m_radio_info.id.mac, sizeof(mac_address_t)) == 0) {
+            if (memcmp(ruid, dm->m_radio[j].m_radio_info.intf.mac, sizeof(mac_address_t)) == 0) {
                 found_radio = true;
                 break;
             }
@@ -1773,7 +1776,7 @@ int em_channel_t::handle_channel_scan_req(unsigned char *buff, unsigned int len)
         if (tlv->type == em_tlv_type_channel_scan_req) {
 			req = (em_channel_scan_req_t *)tlv->value;
 
-			memcpy(params.ruid, get_radio_interface_mac(), sizeof(em_radio_id_t));
+			memcpy(params.ruid, get_radio_interface_mac(), sizeof(mac_address_t));
 			params.num_op_classes = req->num_op_classes;
 					
 			op_class = req->op_class;
@@ -1832,6 +1835,7 @@ void em_channel_t::fill_scan_result(dm_scan_result_t *scan_res, em_channel_scan_
         tmp += sizeof(unsigned char);
 
         strncpy(nbr->ssid, (char *)tmp, ssid_len + 1);
+        nbr->ssid[ssid_len] = '\0';
         tmp += ssid_len;
 
         memcpy(&nbr->signal_strength, tmp, sizeof(unsigned char));
@@ -1897,15 +1901,14 @@ int em_channel_t::handle_channel_scan_rprt(unsigned char *buff, unsigned int len
 			res = (em_channel_scan_result_t *)tlv->value;;
 			
 			strncpy(id.net_id, dm->m_network.m_net_info.id, strlen(dm->m_network.m_net_info.id) + 1);	
-			memcpy(id.dev_mac, dm->m_device.m_device_info.id.mac, sizeof(mac_address_t));
-            memcpy(id.ruid, res->ruid, sizeof(mac_address_t));
+			memcpy(id.dev_mac, dm->m_device.m_device_info.intf.mac, sizeof(mac_address_t));
+            memcpy(id.scanner_mac, res->ruid, sizeof(mac_address_t));
             id.op_class = res->op_class;
             id.channel = res->channel;
+			id.scanner_type = em_scanner_type_radio;
 
 			if ((scan_res = dm->find_matching_scan_result(&id)) == NULL) {
-				scan_res = &dm->m_scan_result[dm->m_num_scan_results];
-				memcpy(&scan_res->m_scan_result.id, &id, sizeof(em_scan_result_id_t));
-				dm->m_num_scan_results++;	
+				scan_res = dm->create_new_scan_result(&id);
 			}
 
 			fill_scan_result(scan_res, res);
@@ -1932,7 +1935,6 @@ void em_channel_t::process_msg(unsigned char *data, unsigned int len)
     
     hdr = (em_raw_hdr_t *)data;
     cmdu = (em_cmdu_t *)(data + sizeof(em_raw_hdr_t));
-    
     switch (htons(cmdu->type)) {
         case em_msg_type_channel_pref_query:
 	        if (get_service_type() == em_service_type_agent) {
@@ -2011,7 +2013,7 @@ void em_channel_t::process_state()
 		case em_state_agent_channel_scan_result_pending:
             if (get_service_type() == em_service_type_agent) {
 				dm = get_data_model();
-				while (last_index < dm->m_num_scan_results) {
+				while (last_index < dm->get_num_scan_results()) {
                 	send_channel_scan_report_msg(&last_index);
 				}
                 set_state(em_state_agent_configured);
