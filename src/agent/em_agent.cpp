@@ -700,8 +700,6 @@ void em_agent_t::sta_cb(char *event_name, raw_data_t *data)
 {
     //printf("%s:%d Recv data from onewifi:\r\n%s\r\n", __func__, __LINE__, (char *)data->raw_data.bytes);
     g_agent.io_process(em_bus_event_type_sta_list, (unsigned char *)data->raw_data.bytes, data->raw_data_len);
-
-    return NULL;
 }
 
 void em_agent_t::onewifi_cb(char *event_name, raw_data_t *data)

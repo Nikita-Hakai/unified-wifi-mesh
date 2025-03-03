@@ -808,6 +808,7 @@ typedef struct {
     em_80211_neighbor_report_t bss_transition_cand_list[0];
 }__attribute__((__packed__)) em_80211_btm_req_var_t;
 
+//NH_Mmod needed
 typedef struct {
     em_steering_req_t agile_multiband;
     unsigned char reason_code;
