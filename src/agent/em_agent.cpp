@@ -38,11 +38,22 @@
 #include "em_cmd_agent.h"
 #include "em_orch_agent.h"
 #include "util.h"
+#include <cjson/cJSON.h>
+
+#include <vector>
+#ifdef AL_SAP
+#include "al_service_access_point.hpp"
+#endif
 
 #define RETRY_SLEEP_INTERVAL_IN_MS 1000
+#define SOCKET_PATH "/tmp/ieee1905_tunnel"
 
 em_agent_t g_agent;
 const char *global_netid = "OneWifiMesh";
+#ifdef AL_SAP
+AlServiceAccessPoint* g_sap;
+MacAddress g_al_mac_sap;
+#endif
 
 void em_agent_t::handle_sta_list(em_bus_event_t *evt)
 {
@@ -299,6 +310,29 @@ void em_agent_t::handle_btm_request_action_frame(em_bus_event_t *evt)
     }
 }
 
+void em_agent_t::handle_recv_gas_frame(em_bus_event_t *evt)
+{
+    if (!evt) {
+        printf("%s:%d: NULL bus event!\n", __func__, __LINE__);
+        return;
+    }
+    const size_t full_frame_length = evt->data_len;
+    const size_t mgmt_hdr_len      = offsetof(struct ieee80211_mgmt, u);
+    ieee80211_mgmt *mgmt_frame     = (ieee80211_mgmt *)evt->u.raw_buff;
+    mac_addr_str_t dest_mac;
+    dm_easy_mesh_t::macbytes_to_string(mgmt_frame->da, dest_mac);
+    em_t *dest_node = (em_t *)hash_map_get(g_agent.m_em_map, dest_mac);
+    if (!dest_node) {
+        printf("%s:%d: no node found for MAC '%s'\n", __func__, __LINE__, dest_mac);
+        return;
+    }
+    auto gas_frame_base = (ec_gas_frame_base_t *)evt->u.raw_buff + mgmt_hdr_len;
+    if (!dest_node->m_ec_manager->handle_recv_gas_pub_action_frame(
+            gas_frame_base, full_frame_length - mgmt_hdr_len, mgmt_frame->sa)) {
+        printf("%s:%d: EC manager failed to handle GAS frame!\n", __func__, __LINE__);
+    }
+}
+
 void em_agent_t::handle_recv_wfa_action_frame(em_bus_event_t *evt)
 {
     size_t frame_len = evt->data_len;
@@ -338,8 +372,7 @@ void em_agent_t::handle_recv_wfa_action_frame(em_bus_event_t *evt)
 
     switch (oui_type) {
     case DPP_OUI_TYPE:
-        // TODO: Implement DPP
-        dest_radio_node->m_ec_session->handle_recv_ec_action_frame(ec_frame, full_action_frame_len);
+        dest_radio_node->m_ec_manager->handle_recv_ec_action_frame(ec_frame, full_action_frame_len, mgmt_frame->sa);
         break;
     default:
         break;
@@ -501,6 +534,11 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
         case em_bus_event_type_recv_wfa_action_frame:
             handle_recv_wfa_action_frame(evt);
             break;
+
+        case em_bus_event_type_recv_gas_frame:
+            handle_recv_gas_frame(evt);
+            break;
+
         default:
             break;
     }    
@@ -550,6 +588,40 @@ void em_agent_t::handle_500ms_tick()
     m_orch->handle_timeout();
 }
 
+bool em_agent_t::send_action_frame(uint8_t dest_mac[ETH_ALEN], uint8_t *action_frame, size_t action_frame_len, unsigned int frequency) {
+
+    wifi_bus_desc_t *desc = get_bus_descriptor();
+    ASSERT_NOT_NULL(desc, false, "%s:%d descriptor is null\n", __func__, __LINE__);
+
+    // Allocate memory for the action frame parameters, ieee80211 header and action frame body
+    action_frame_params_t *act_frame_params = (action_frame_params_t*) calloc(sizeof(action_frame_params_t) + action_frame_len, 1);
+    ASSERT_NOT_NULL(act_frame_params, false, "%s:%d calloc failed\n", __func__, __LINE__);
+
+    // Hardcoded to 0 just the same as the other bus calls
+    // NOTE: AccessPoint.1 = ap_index 0. One is the data model indexing, one is NL80211/hal indexing
+    act_frame_params->ap_index = 0;
+    memcpy(act_frame_params->dest_addr, dest_mac, ETH_ALEN);
+    act_frame_params->frequency = frequency;
+    act_frame_params->frame_len = action_frame_len;
+    memcpy(act_frame_params->frame_data, action_frame, action_frame_len);
+
+    raw_data_t raw_act_frame;
+    memset(&raw_act_frame, 0, sizeof(raw_data_t));
+    raw_act_frame.raw_data.bytes = (uint8_t *)act_frame_params;
+    raw_act_frame.raw_data_len = sizeof(action_frame_params_t) + action_frame_len;
+    raw_act_frame.data_type = bus_data_type_bytes;
+
+    // Send the action frame
+    if (desc->bus_set_fn(&m_bus_hdl, "Device.WiFi.AccessPoint.1.RawFrame.Mgmt.Action.Tx", &raw_act_frame) != 0) {
+        printf("%s:%d bus set failed\n", __func__, __LINE__);
+        free(act_frame_params);
+        return false;
+    }
+
+    free(act_frame_params);
+    return true;
+}
+
 
 void em_agent_t::input_listener()
 {
@@ -558,6 +630,7 @@ void em_agent_t::input_listener()
     raw_data_t data;
     int num_retry = 0;
     bus_error_t bus_error_val;
+    char service_name[] = "EasyMesh_service";
 
     bus_init(&m_bus_hdl);
 
@@ -565,7 +638,7 @@ void em_agent_t::input_listener()
         printf("%s:%d descriptor is null\n", __func__, __LINE__);
     }
 
-    if (desc->bus_open_fn(&m_bus_hdl, "EasyMesh_service") != 0) {
+    if (desc->bus_open_fn(&m_bus_hdl, service_name) != 0) {
         printf("%s:%d bus open failed\n",__func__, __LINE__);
         return;
     }
@@ -579,6 +652,14 @@ void em_agent_t::input_listener()
 		usleep(RETRY_SLEEP_INTERVAL_IN_MS * 1000);
 		num_retry++;
 		printf("retrying %d\n", num_retry);
+
+        if (num_retry % 5 == 0) {
+            if (access(EM_CFG_FILE, F_OK) != -1) {
+                printf("Check that OneWifi is running.\n");
+            } else {
+                printf("EasymeshCfg.json does not exist. Generate via the unified-wifi-mesh CLI/TUI (if co-located) or by adding the `--interface` flag to the agent (if not)\n");
+            }
+        }
     }
     printf("%s:%d recv data:\r\n%s\r\n", __func__, __LINE__, (char *)data.raw_data.bytes);
 
@@ -670,6 +751,12 @@ int em_agent_t::mgmt_action_frame_cb(char *event_name, raw_data_t *data)
         }
     }
 
+    if (mgmt_frame->u.action.u.public_action.action >= WLAN_PA_GAS_INITIAL_REQ &&
+        mgmt_frame->u.action.u.public_action.action <= WLAN_PA_GAS_COMEBACK_RESP) {
+        printf("%s:%d: GAS frame rx'd\n", __func__, __LINE__);
+        g_agent.io_process(em_bus_event_type_recv_gas_frame, (uint8_t *)data->raw_data.bytes,
+                           data->raw_data_len);
+    }
 
     return 0;
 }
@@ -1031,6 +1118,75 @@ void em_agent_t::start_complete()
 
 }
 
+bool em_agent_t::try_create_default_em_cfg(std::string interface)
+{
+
+    std::string em_cfg_file_path = EM_CFG_FILE;
+
+    
+    if (access(em_cfg_file_path.c_str(), F_OK) == 0) {
+        // EM_CFG_FILE already exists
+        printf("%s:%d: EasymeshCfg.json already exists, not overriding.\n", __func__, __LINE__);
+        return true;
+    }
+
+    printf("%s:%d: Creating default EasymeshCfg.json for interface: %s\n", __func__, __LINE__, interface.c_str());
+    mac_address_t if_mac = {0};
+    if (dm_easy_mesh_t::mac_address_from_name(interface.c_str(), if_mac) < 0){
+        printf("%s:%d: Failed to get MAC address for interface: %s\n", __func__, __LINE__, interface.c_str());
+        return false;
+    }
+
+    mac_addr_str_t mac_str;
+    if (!dm_easy_mesh_t::macbytes_to_string(if_mac, mac_str)){
+        printf("%s:%d: Failed to convert MAC address to string\n", __func__, __LINE__);
+        return false;
+    }
+    printf("%s:%d: Interface MAC address: %s\n", __func__, __LINE__, mac_str);
+
+    FILE *fp = fopen(em_cfg_file_path.c_str(), "w");
+    if (fp == NULL) {
+        printf("%s:%d: Failed to create default EasymeshCfg.json\n", __func__, __LINE__);
+        return false;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        printf("%s:%d: Failed to create root JSON object\n", __func__, __LINE__);
+        fclose(fp);
+        return false;
+    }
+    cJSON *al_mac = cJSON_CreateString(mac_str);
+    if (al_mac == NULL) {
+        printf("%s:%d: Failed to create AL_MAC_ADDR JSON object\n", __func__, __LINE__);
+        fclose(fp);
+        cJSON_Delete(root);
+        return false;
+    }
+    cJSON *colocated_mode = cJSON_CreateNumber(0);
+    if (colocated_mode == NULL) {
+        printf("%s:%d: Failed to create Colocated_mode JSON object\n", __func__, __LINE__);
+        fclose(fp);
+        cJSON_Delete(root);
+        return false;
+    }
+
+    cJSON_AddItemToObject(root, "AL_MAC_ADDR", al_mac);
+    cJSON_AddItemToObject(root, "Colocated_mode", colocated_mode);
+
+    char *json_str = cJSON_Print(root);
+    fprintf(fp, "%s", json_str);
+    fclose(fp);
+    cJSON_Delete(root);
+
+    printf("%s:%d: Created default EasymeshCfg.json for interface: %s\n", __func__, __LINE__, interface.c_str());
+    printf("%s\n", json_str);
+
+    free(json_str);
+
+    return true;
+}
+
 em_agent_t::em_agent_t()
 {
 
@@ -1040,10 +1196,80 @@ em_agent_t::~em_agent_t()
 {
 
 }
+#ifdef AL_SAP
+AlServiceAccessPoint* em_agent_t::al_sap_register()
+{
+    AlServiceAccessPoint* sap = new AlServiceAccessPoint(SOCKET_PATH);
+
+    AlServiceRegistrationRequest registrationRequest(ServiceOperation::SO_ENABLE, ServiceType::SAP_TUNNEL_CLIENT);
+    sap->serviceAccessPointRegistrationRequest(registrationRequest);
+
+    AlServiceRegistrationResponse registrationResponse = sap->serviceAccessPointRegistrationResponse();
+
+    RegistrationResult result = registrationResponse.getResult();
+    if (result == RegistrationResult::SUCCESS) {
+        g_al_mac_sap = registrationResponse.getAlMacAddressLocal();
+        std::cout << "Registration completed with MAC Address: ";
+        for (auto byte : g_al_mac_sap) {
+            std::cout << std::hex << static_cast<int>(byte) << " ";
+        }
+        std::cout << std::dec << std::endl;
+    } else {
+        std::cout << "Registration failed with error: " << (int)result << std::endl;
+    }
+
+    return sap;
+}
+#endif
 
 int main(int argc, const char *argv[])
 {
-    if (g_agent.init(argv[1]) == 0) {
+
+    std::vector<std::string> args;
+    // Skip the first argument which is the program name
+    for (int i = 1; i < argc; i++) {
+        args.push_back(argv[i]);
+    }
+
+    if ((args.size() == 1) && (args[0] == "--help" || args[0] == "-h")) {
+        printf("Usage: %s [data-model-path] [--interface=iface]\n", argv[0]);
+        return 0;
+    }
+
+    std::string data_model_path = "";
+
+    bool interface_found = false;
+
+    for (auto arg : args) {
+        if (arg.find("--interface=") != std::string::npos && !interface_found) {
+            std::string interface = arg.substr(strlen("--interface="));
+            if (interface.empty()) {
+                printf("Invalid interface name\n");
+                return -1;
+            }
+            if (!g_agent.try_create_default_em_cfg(interface)) {
+                printf("Failed to create default EasymeshCfg.json\n");
+                return -1;
+            }
+            interface_found = true;
+            continue;
+        }
+        if (data_model_path.empty()) {
+            data_model_path = arg;
+            continue;
+        }
+        printf("Invalid argument: %s\n", arg.c_str());
+        return -1;
+    }
+
+    if (!data_model_path.empty()) {
+        printf("Using data model path: %s\n", data_model_path.c_str());
+    }
+
+    if (g_agent.init(data_model_path.empty() ? NULL : data_model_path.c_str()) == 0) {
+#ifdef AL_SAP
+    g_sap = g_agent.al_sap_register();
+#endif
         g_agent.start();
     }
 

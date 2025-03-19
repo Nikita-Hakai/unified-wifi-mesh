@@ -91,7 +91,7 @@ public:
      * @note The hmac buffer must be pre-allocated with sufficient space for the output
      *       (32 bytes for SHA-256)
      */
-    static uint8_t platform_hmac_hash(const EVP_MD * hashing_algo, uint8_t *key, uint32_t keylen, uint8_t num_elem, uint8_t **addr, uint32_t *len, uint8_t *hmac);
+    static uint8_t platform_hmac_hash(const EVP_MD * hashing_algo, uint8_t *key, uint32_t keylen, uint8_t num_elem, uint8_t **addr, size_t *len, uint8_t *hmac);
 
     /**
     * @brief Convenience wrapper to compute HMAC-SHA256 hash for multiple input elements
@@ -105,7 +105,7 @@ public:
     *
     * @return 1 on success, 0 on failure
     */
-    inline static uint8_t platform_hmac_SHA256(uint8_t *key, uint32_t keylen, uint8_t num_elem, uint8_t **addr, uint32_t *len, uint8_t *hmac){
+    inline static uint8_t platform_hmac_SHA256(uint8_t *key, uint32_t keylen, uint8_t num_elem, uint8_t **addr, size_t *len, uint8_t *hmac){
         return platform_hmac_hash(EVP_sha256(), key, keylen, num_elem, addr, len, hmac);
     }
     
@@ -120,7 +120,7 @@ public:
     *
     * @return 1 on success, 0 on failure
     */
-    static uint8_t platform_hash(const EVP_MD * hashing_algo, uint8_t num_elem, uint8_t **addr, uint32_t *len, uint8_t *digest);
+    static uint8_t platform_hash(const EVP_MD * hashing_algo, uint8_t num_elem, uint8_t **addr, size_t *len, uint8_t *digest);
 
     /**
     * @brief Convenience wrapper to compute SHA-256 hash for multiple input elements
@@ -132,7 +132,7 @@ public:
     * 
     * @return 1 on success, 0 on failure
     */
-    inline static uint8_t platform_SHA256(uint8_t num_elem, uint8_t **addr, uint32_t *len, uint8_t *digest){
+    inline static uint8_t platform_SHA256(uint8_t num_elem, uint8_t **addr, size_t *len, uint8_t *digest){
         return platform_hash(EVP_sha256(), num_elem, addr, len, digest);
     }
     
@@ -157,7 +157,7 @@ public:
     * 
     * @return 1 on success, 0 on HMAC failure
     */
-    static uint8_t wps_key_derivation_function(uint8_t *key, uint8_t *label_prefix, uint32_t label_prefix_len, char *label, uint8_t *res, uint32_t res_len);
+    static uint8_t wps_key_derivation_function(uint8_t *key, uint8_t *label_prefix, size_t label_prefix_len, char *label, uint8_t *res, uint32_t res_len);
 
     /**
     * @brief Decrypts data using OpenSSL cipher in place
@@ -300,24 +300,24 @@ public:
     static EC_KEY* create_ec_key_from_base64_der(const char* base64_der_pubkey);
 
 
-    static inline uint8_t generate_iv(unsigned char *iv, unsigned int len) { if (!RAND_bytes(iv, len)) { return 0; } else { return 1; } }
+    static inline uint8_t generate_iv(unsigned char *iv, unsigned int len) { if (!RAND_bytes(iv, static_cast<int>(len))) { return 0; } else { return 1; } }
     static inline uint8_t generate_nonce(em_nonce_t nonce) { if (!RAND_bytes(nonce, sizeof(em_nonce_t))) { return 0; } else { return 1; } }
 
     // START: Object getters and setters
     inline em_crypto_info_t *get_crypto_info() { return &m_crypto_info; }
 
-    inline unsigned int get_e_uuid(unsigned char *uuid) { memcpy(uuid, (unsigned char *)&m_crypto_info.e_uuid, sizeof(uuid_t)); return sizeof(uuid_t); }
-    inline unsigned int get_r_uuid(unsigned char *uuid) { memcpy(uuid, (unsigned char *)&m_crypto_info.r_uuid, sizeof(uuid_t)); return sizeof(uuid_t); }
-    inline unsigned int get_e_nonce(unsigned char *nonce) { memcpy(nonce, (unsigned char *)&m_crypto_info.e_nonce, sizeof(em_nonce_t)); return sizeof(em_nonce_t); }
-    inline unsigned int get_r_nonce(unsigned char *nonce) { memcpy(nonce, (unsigned char *)&m_crypto_info.r_nonce, sizeof(em_nonce_t)); return sizeof(em_nonce_t); }
+    inline unsigned int get_e_uuid(unsigned char *uuid) { memcpy(uuid, reinterpret_cast<unsigned char *>(&m_crypto_info.e_uuid), sizeof(uuid_t)); return sizeof(uuid_t); }
+    inline unsigned int get_r_uuid(unsigned char *uuid) { memcpy(uuid, reinterpret_cast<unsigned char *>(&m_crypto_info.r_uuid), sizeof(uuid_t)); return sizeof(uuid_t); }
+    inline unsigned int get_e_nonce(unsigned char *nonce) { memcpy(nonce, reinterpret_cast<unsigned char *>(&m_crypto_info.e_nonce), sizeof(em_nonce_t)); return sizeof(em_nonce_t); }
+    inline unsigned int get_r_nonce(unsigned char *nonce) { memcpy(nonce, reinterpret_cast<unsigned char *>(&m_crypto_info.r_nonce), sizeof(em_nonce_t)); return sizeof(em_nonce_t); }
 
-    inline unsigned char *get_e_nonce() { return (unsigned char *)&m_crypto_info.e_nonce; }
-    inline unsigned char *get_r_nonce() { return (unsigned char *)&m_crypto_info.r_nonce; }
+    inline unsigned char *get_e_nonce() { return reinterpret_cast<unsigned char *>(&m_crypto_info.e_nonce); }
+    inline unsigned char *get_r_nonce() { return reinterpret_cast<unsigned char *>(&m_crypto_info.r_nonce); }
 
-    inline void set_e_uuid(unsigned char *uuid, unsigned int len) { memcpy((unsigned char *)&m_crypto_info.e_uuid, uuid, len); }
-    inline void set_r_uuid(unsigned char *uuid, unsigned int len) { memcpy((unsigned char *)&m_crypto_info.r_uuid, uuid, len); }
-    inline void set_e_nonce(unsigned char *nonce, unsigned int len) { memcpy((unsigned char *)&m_crypto_info.e_nonce, nonce, len); }
-    inline void set_r_nonce(unsigned char *nonce, unsigned int len) { memcpy((unsigned char *)&m_crypto_info.r_nonce, nonce, len); }
+    inline void set_e_uuid(unsigned char *uuid, unsigned int len) { memcpy(reinterpret_cast<unsigned char *>(&m_crypto_info.e_uuid), uuid, len); }
+    inline void set_r_uuid(unsigned char *uuid, unsigned int len) { memcpy(reinterpret_cast<unsigned char *>(&m_crypto_info.r_uuid), uuid, len); }
+    inline void set_e_nonce(unsigned char *nonce, unsigned int len) { memcpy(reinterpret_cast<unsigned char *>(&m_crypto_info.e_nonce), nonce, len); }
+    inline void set_r_nonce(unsigned char *nonce, unsigned int len) { memcpy(reinterpret_cast<unsigned char *>(&m_crypto_info.r_nonce), nonce, len); }
 
     inline unsigned char *get_e_public() { return m_crypto_info.e_pub; }
     inline unsigned int get_e_public_len() { return m_crypto_info.e_pub_len; }

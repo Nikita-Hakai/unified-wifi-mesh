@@ -22,6 +22,7 @@
 #include "em_base.h"
 #include "em_crypto.h"
 #include "dm_easy_mesh.h"
+#include "ec_manager.h"
 
 class em_cmd_t;
 class em_mgr_t;
@@ -35,12 +36,12 @@ class em_configuration_t {
     int create_operational_bss_tlv_topology(unsigned char *buff);
     int	create_bss_config_rprt_tlv(unsigned char *buff);
     int create_device_info_type_tlv(unsigned char *buff);
-    short create_client_assoc_event_tlv(unsigned char *buff, mac_address_t sta, bssid_t bssid, bool assoc);
+    unsigned short create_client_assoc_event_tlv(unsigned char *buff, mac_address_t sta, bssid_t bssid, bool assoc);
     int create_ap_mld_config_tlv(unsigned char *buff);
     int create_bsta_mld_config_tlv(unsigned char *buff);
     int create_assoc_sta_mld_config_report_tlv(unsigned char *buff);
     int create_tid_to_link_map_policy_tlv(unsigned char *buff);
-    short create_eht_operations_tlv(unsigned char *buff);
+    unsigned short create_eht_operations_tlv(unsigned char *buff);
 
     int send_topology_response_msg(unsigned char *dst);
     int send_topology_notification_by_client(mac_address_t sta, bssid_t bssid, bool assoc);
@@ -71,10 +72,10 @@ class em_configuration_t {
     int handle_ap_mld_config_resp(unsigned char *buff, unsigned int len);
 	void handle_ap_vendor_operational_bss(unsigned char *value, unsigned int len);
 
-    short create_m1_msg(unsigned char *buff);
-    short create_m2_msg(unsigned char *buff, em_haul_type_t haul_type);
-    short create_traffic_separation_policy(unsigned char *buff);
-    short create_error_code_tlv(unsigned char *buff, int val, mac_addr_t sta_mac);
+    unsigned short create_m1_msg(unsigned char *buff);
+    unsigned short create_m2_msg(unsigned char *buff, em_haul_type_t haul_type);
+    unsigned short create_traffic_separation_policy(unsigned char *buff);
+    unsigned short create_error_code_tlv(unsigned char *buff, int val, mac_addr_t sta_mac);
   	int create_vendor_operational_bss_tlv(unsigned char *buff);
  
     // state handlers 
@@ -89,6 +90,7 @@ class em_configuration_t {
     void fill_media_data(em_media_spec_data_t *spec);
 
 	virtual em_mgr_t *get_mgr() = 0;
+    virtual ec_manager_t& get_ec_mgr() = 0;
     virtual dm_easy_mesh_t *get_data_model() = 0;
     virtual em_state_t get_state() = 0;
     virtual void set_state(em_state_t state) = 0;
@@ -147,8 +149,8 @@ public:
     int send_topology_query_msg();
     int send_autoconfig_renew_msg();
     int handle_encrypted_settings();
-    unsigned int create_encrypted_settings(unsigned char *buff, em_haul_type_t haul_type);
-    unsigned int create_authenticator(unsigned char *buff);
+    int create_encrypted_settings(unsigned char *buff, em_haul_type_t haul_type);
+    int create_authenticator(unsigned char *buff);
 
     unsigned int get_e_uuid(unsigned char *uuid) { return m_crypto.get_e_uuid(uuid); }
     unsigned int get_r_uuid(unsigned char *uuid) { return m_crypto.get_r_uuid(uuid); }
@@ -187,17 +189,17 @@ public:
             return em_crypto_t::platform_compute_shared_secret(secret, secret_len, remote_pub, pub_len, local_priv, static_cast<uint8_t>(priv_len));
     }
 
-    int compute_digest(unsigned char num, unsigned char **addr, unsigned int *len, unsigned char *digest) {
+    int compute_digest(unsigned char num, unsigned char **addr, size_t *len, unsigned char *digest) {
         return em_crypto_t::platform_SHA256(num, addr, len, digest); 
     }
 
     int compute_kdk(unsigned char *key, unsigned short keylen, 
         unsigned char num_elem, unsigned char **addr, 
-        unsigned int *len, unsigned char *hmac) {
+        size_t *len, unsigned char *hmac) {
             return em_crypto_t::platform_hmac_SHA256(key, keylen, num_elem, addr, len, hmac);
     }
 
-    int derive_key(unsigned char *key, unsigned char *label_prefix, unsigned int label_prefix_len, 
+    int derive_key(unsigned char *key, unsigned char *label_prefix, size_t label_prefix_len, 
         char *label, unsigned char *res, unsigned int res_len) {
             return em_crypto_t::wps_key_derivation_function(key, label_prefix, label_prefix_len, label, res, res_len);
     }

@@ -49,7 +49,14 @@
 #include "em.h"
 #include "em_cmd.h"
 #include "em_cmd_exec.h"
+#include "util.h"
 
+#ifdef AL_SAP
+#include "al_service_access_point.hpp"
+
+extern AlServiceAccessPoint* g_sap;
+extern MacAddress g_al_mac_sap;
+#endif
 
 void em_t::orch_execute(em_cmd_t *pcmd)
 {
@@ -95,8 +102,9 @@ void em_t::orch_execute(em_cmd_t *pcmd)
                 if (dpp_info->ec_freqs[i] == 0) break;
                 printf("\t\tFreq: %d\n", dpp_info->ec_freqs[i]);
             }
-
-            m_ec_session->init_session(dpp_info);
+            if (!m_ec_manager->cfg_start(dpp_info)){
+                printf("Failed to start DPP\n");
+            }
             
             break;
         }
@@ -189,27 +197,9 @@ void em_t::orch_execute(em_cmd_t *pcmd)
         case em_cmd_type_beacon_report:
             m_sm.set_state(em_state_agent_beacon_report_pending);
             break;
-
-        case em_cmd_type_none:
-        case em_cmd_type_reset:
-        case em_cmd_type_get_network:
-        case em_cmd_type_get_device:
-        case em_cmd_type_remove_device:
-        case em_cmd_type_get_radio:
-        case em_cmd_type_get_ssid:
-        case em_cmd_type_get_channel:
-        case em_cmd_type_get_bss:
-        case em_cmd_type_get_sta:
-        case em_cmd_type_steer_sta:
-        case em_cmd_type_disassoc_sta:
-        case em_cmd_type_btm_sta:
-        case em_cmd_type_vap_config:
-        case em_cmd_type_topo_sync:
-        case em_cmd_type_get_policy:
-        case em_cmd_type_get_mld_config:
-        case em_cmd_type_max:
+    
+        default:
             break;
-
         
     }
 }
@@ -433,35 +423,7 @@ void em_t::handle_ctrl_state()
             em_configuration_t::process_ctrl_state();
             break;
 
-        case em_cmd_type_none:
-        case em_cmd_type_reset:
-        case em_cmd_type_get_network:
-        case em_cmd_type_get_device:
-        case em_cmd_type_remove_device:
-        case em_cmd_type_get_radio:
-        case em_cmd_type_get_ssid:
-        case em_cmd_type_get_channel:
-        case em_cmd_type_scan_result:
-        case em_cmd_type_get_bss:
-        case em_cmd_type_get_sta:
-        case em_cmd_type_steer_sta:
-        case em_cmd_type_disassoc_sta:
-        case em_cmd_type_btm_sta:
-        case em_cmd_type_dev_init:
-        case em_cmd_type_vap_config:
-        case em_cmd_type_sta_list:
-        case em_cmd_type_start_dpp:
-        case em_cmd_type_ap_cap_query:
-        case em_cmd_type_client_cap_query:
-        case em_cmd_type_topo_sync:
-        case em_cmd_type_onewifi_cb:
-        case em_cmd_type_channel_pref_query:
-        case em_cmd_type_op_channel_report:
-        case em_cmd_type_btm_report:
-        case em_cmd_type_get_policy:
-        case em_cmd_type_avail_spectrum_inquiry:
-        case em_cmd_type_get_mld_config:
-        case em_cmd_type_max:
+        default:
             break;
     }
 }
@@ -581,6 +543,9 @@ int em_t::set_bp_filter()
 
 int em_t::start_al_interface()
 {
+#ifdef AL_SAP
+    m_fd = g_sap->getSocketDescriptor();
+#else
     int sock_fd;
     struct sockaddr_ll addr_ll;
     struct sockaddr *addr;
@@ -607,7 +572,7 @@ int em_t::start_al_interface()
     m_fd = sock_fd;
 
     set_bp_filter();
-
+#endif // AL_SAP
     return 0;
 }
 
@@ -618,9 +583,27 @@ int em_t::send_cmd(em_cmd_type_t type, em_service_type_t svc, unsigned char *buf
 
 int em_t::send_frame(unsigned char *buff, unsigned int len, bool multicast)
 {
+    int ret = 0;
+#ifdef AL_SAP
+    AlServiceDataUnit sdu;
+    sdu.setSourceAlMacAddress(g_al_mac_sap);
+    if (m_service_type == em_service_type_agent) {
+        sdu.setDestinationAlMacAddress({0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    } else if (m_service_type == em_service_type_ctrl) {
+        sdu.setDestinationAlMacAddress({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
+    }
+
+    std::vector<unsigned char> payload;
+    for (unsigned int i = 0; i < len; i++) {
+        payload.push_back(buff[i]);
+    }
+    sdu.setPayload(payload);
+
+    g_sap->serviceAccessPointDataRequest(sdu);
+#else
     em_short_string_t   ifname;
     struct sockaddr_ll sadr_ll;
-    int sock, ret;
+    int sock;
     mac_address_t   multi_addr = {0x01, 0x80, 0xc2, 0x00, 0x00, 0x13};
     em_raw_hdr_t *hdr = reinterpret_cast<em_raw_hdr_t *>(buff);
 
@@ -637,9 +620,9 @@ int em_t::send_frame(unsigned char *buff, unsigned int len, bool multicast)
     memcpy(sadr_ll.sll_addr, (multicast == true) ? multi_addr:hdr->dst, sizeof(mac_address_t));
 
     ret = static_cast<int>(sendto(sock, buff, len, 0, reinterpret_cast<const struct sockaddr*>(&sadr_ll), sizeof(struct sockaddr_ll)));
-
+    
     close(sock);
-
+#endif
     return ret;
 }
 
@@ -1095,6 +1078,15 @@ em_t::em_t(em_interface_t *ruid, em_freq_band_t band, dm_easy_mesh_t *dm, em_mgr
     RAND_bytes(get_crypto_info()->r_nonce, sizeof(em_nonce_t));
     m_data_model = dm;
 	m_mgr = mgr;
+
+    std::string mac_address = util::mac_to_string(get_peer_mac());
+    m_ec_manager = std::unique_ptr<ec_manager_t>(new ec_manager_t(
+        mac_address,
+        std::bind(&em_t::send_chirp_notif_msg, this, std::placeholders::_1, std::placeholders::_2),
+        std::bind(&em_t::send_prox_encap_dpp_msg, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4),
+        std::bind(&em_mgr_t::send_action_frame, mgr, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4), 
+        get_service_type() == em_service_type_ctrl
+    ));
 }
 
 em_t::~em_t()

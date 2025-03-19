@@ -81,8 +81,8 @@ extern "C"
 #define EM_MAX_STA_PER_BSS         128
 #define EM_MAX_STA_PER_STEER_POLICY        16 
 #define EM_MAX_STA_PER_AGENT       (EM_MAX_RADIO_PER_AGENT * EM_MAX_STA_PER_BSS)
-#define EM_MAX_NEIGHORS		32
-#define EM_MAX_CHANNEL_SCAN_RPRT_MSG_LEN		768
+#define EM_MAX_NEIGHORS		16
+#define EM_MAX_CHANNEL_SCAN_RPRT_MSG_LEN		166
 #define EM_MAX_CLIENT_MARKER    5
 
 #define   EM_MAX_EVENT_DATA_LEN   4096*100
@@ -209,11 +209,17 @@ extern "C"
 #define 	EM_PARSE_ERR_CONFIG		EM_PARSE_NO_ERR	- 3	
 #define 	EM_PARSE_ERR_NO_CHANGE	EM_PARSE_NO_ERR	- 4	
 
+#ifndef ETH_ALEN
+#define ETH_ALEN 6
+#endif // ETH_ALEN
+
 typedef char em_interface_name_t[32];
 typedef unsigned char em_nonce_t[16];
 typedef unsigned char em_dh5_key_t[192];    // because this is DH group 5 (1536 bits)
 typedef char    em_short_string_t[64];
 typedef char    em_long_string_t[128];
+typedef char    em_2xlong_string_t[256];
+typedef char    em_3xlong_string_t[512];
 typedef char    em_string_t[32];
 typedef char    em_small_string_t[16];
 typedef char    em_tiny_string_t[4];
@@ -608,11 +614,16 @@ typedef struct {
     unsigned char enrollee_mac_addr_present : 1;
     unsigned char reserved : 1;
     unsigned char dpp_frame_indicator : 1;
-    unsigned char content_type : 5;
-    mac_address_t dest_mac_addr;
-    unsigned char frame_type;
-    unsigned short encap_frame_len;
-    unsigned char encap_frame[0];
+    unsigned char reserved2 : 5;
+/*
+    Contains:
+        - dest_mac_addr (6 bytes, if enrollee_mac_addr_present)
+        - frame_type (1 byte)
+        - encap_frame_len (2 bytes)
+        - encap_frame (encap_frame_len bytes)
+*/
+    unsigned char data[0];
+
 }__attribute__((__packed__)) em_encap_dpp_t;
 
 typedef struct {
@@ -2230,6 +2241,11 @@ typedef struct {
     bool    multi_bssid;
     bool    transmitted_bssid;
     em_eht_operations_bss_t eht_ops;
+
+    // Extra vendor information elements for the BSS
+    // @note Don't manually allocate, use the helper functions to add/remove elements 
+    unsigned char vendor_elements[WIFI_AP_MAX_VENDOR_IE_LEN];
+    size_t vendor_elements_len;
 } em_bss_info_t;
 
 typedef struct {
@@ -2575,7 +2591,8 @@ typedef enum {
     em_bus_event_type_get_mld_config,
     em_bus_event_type_mld_reconfig,
     em_bus_event_type_beacon_report,
-    em_bus_event_type_recv_wfa_action_frame
+    em_bus_event_type_recv_wfa_action_frame,
+    em_bus_event_type_recv_gas_frame,
 } em_bus_event_type_t;
 
 typedef struct {

@@ -44,7 +44,7 @@ class em_t;
 
 class dm_easy_mesh_t {
 public:
-    webconfig_subdoc_data_t m_wifi_data;
+    webconfig_subdoc_data_t *m_wifi_data;
 	unsigned int m_num_preferences;
 	em_interface_preference_t	m_preference[EM_MAX_PLATFORMS];
 	unsigned int	m_num_interfaces;
@@ -198,7 +198,7 @@ public:
 	unsigned int	get_num_scan_results() { return hash_map_count(m_scan_result_map); }
 	dm_scan_result_t *get_scan_result(unsigned int index);
     void update_scan_results(em_scan_result_t *scan_result);
-    static void update_scan_results(void *dm, em_scan_result_t *scan_result) { ((dm_easy_mesh_t *)dm)->update_scan_results(scan_result); }
+    static void update_scan_results(void *dm, em_scan_result_t *scan_result) { (static_cast<dm_easy_mesh_t *> (dm))->update_scan_results(scan_result); }
 
     unsigned int get_num_ap_mld() { return m_num_ap_mld; }
     static unsigned int get_num_ap_mld(void *dm) { return (static_cast<dm_easy_mesh_t *>(dm))->get_num_ap_mld(); }
@@ -281,7 +281,7 @@ public:
     static void create_ap_cap_query_json_cmd(char* src_mac_addr, char* agent_al_mac, char* ap_query_json, short msg_id);
     void print_config();
 
-    void set_db_cfg_param(db_cfg_type_t type, char *param);
+    void set_db_cfg_param(db_cfg_type_t type, const char *param);
 	void reset_db_cfg_type(db_cfg_type_t type);
 	bool db_cfg_type_is_set(db_cfg_type_t type) { return m_db_cfg_param.db_cfg_type & static_cast<unsigned int>(type); }
 	char *db_cfg_type_get_criteria(db_cfg_type_t type);
@@ -295,6 +295,18 @@ public:
 	void set_policy(dm_policy_t policy);
     em_t *get_em() { return m_em; }
     void clone_hash_maps(dm_easy_mesh_t& obj);
+
+    static inline webconfig_subdoc_type_t get_subdoc_vap_type_for_freq(em_freq_band_t band) {
+        if (band == em_freq_band_24) return webconfig_subdoc_type_vap_24G;
+        if (band == em_freq_band_5) return webconfig_subdoc_type_vap_5G;
+        return webconfig_subdoc_type_vap_6G;
+    }
+
+    static inline webconfig_subdoc_type_t get_subdoc_radio_type_for_freq(em_freq_band_t band) {
+        if (band == em_freq_band_24) return webconfig_subdoc_type_radio_24G;
+        if (band == em_freq_band_5) return webconfig_subdoc_type_radio_5G;
+        return webconfig_subdoc_type_radio_6G;
+    }
 
 	void reset();
     int init();

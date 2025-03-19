@@ -43,6 +43,25 @@ extern "C"
 #define DPP_OUI_TYPE 0x1A
 #define DPP_MAX_EN_CHANNELS 4
 
+#define DPP_GAS_INITIAL_REQ 0x0A
+#define DPP_GAS_INITIAL_RESP 0x0B
+
+#define APEFMT "%02x,%02x,%02x"
+#define APE2STR(x) static_cast<unsigned int>((x)[0]), static_cast<unsigned int>((x)[1]), static_cast<unsigned int>((x)[2])
+#define APEIDFMT "%02x,%02x,%02x,%02x,%02x,%02x,%02x"
+#define APEID2STR(x) static_cast<unsigned int>((x)[0]), static_cast<unsigned int>((x)[1]), static_cast<unsigned int>((x)[2]), \
+                     static_cast<unsigned int>((x)[3]), static_cast<unsigned int>((x)[4]), static_cast<unsigned int>((x)[5]), \
+                     static_cast<unsigned int>((x)[6])
+#define MACSTRFMT "%02x:%02x:%02x:%02x:%02x:%02x"
+#define MAC2STR(x) static_cast<unsigned int>((x)[0]), static_cast<unsigned int>((x)[1]), static_cast<unsigned int>((x)[2]), \
+                   static_cast<unsigned int>((x)[3]), static_cast<unsigned int>((x)[4]), static_cast<unsigned int>((x)[5])
+
+static const uint8_t BROADCAST_MAC_ADDR[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+// EasyConnect 8.3.2
+static const uint8_t DPP_GAS_CONFIG_REQ_APE[3] = {0x6c, 0x08, 0x00};
+static const uint8_t DPP_GAS_CONFIG_REQ_PROTO_ID[7] = {0xDD, 0x05, 0x50, 0x6F, 0x9A ,0x1A, 0x01};
+
 // As defined by EasyConnect 8.2.1 Table 35
 typedef enum  {
     ec_frame_type_auth_req = 0,
@@ -70,6 +89,8 @@ typedef enum  {
     ec_frame_type_private_peer_intro_notify,
     ec_frame_type_private_peer_intro_update,
     // 24-255 : Reserved
+    // XXX: Note: 255 is "reserved" in EasyConnect spec, but used by EasyMesh
+    ec_frame_type_easymesh = 255,
 } ec_frame_type_t;
 
 // As defined by EasyConnect 8.1 Table 29
@@ -131,6 +152,13 @@ typedef enum {
     DPP_STATUS_NEW_KEY_NEEDED,
 } ec_status_code_t;
 
+typedef enum {
+   dpp_gas_initial_req = 0x0A,
+   dpp_gas_initial_resp = 0x0B,
+   dpp_gas_comeback_req = 0x0C,
+   dpp_gas_comeback_resp = 0x0D,
+} dpp_gas_action_type_t;
+
 // Used to concisely represent the capabilities of a device while allowing for easy access to the uint8_t value
 typedef union {
     struct {
@@ -191,50 +219,215 @@ typedef struct {
     uint8_t attributes[0];
 } __attribute__((packed)) ec_frame_t;
 
+typedef struct {
+    uint8_t category;
+    uint8_t action;
+    uint8_t dialog_token;
+} __attribute__((packed)) ec_gas_frame_base_t;
+
+typedef struct {
+    ec_gas_frame_base_t base;
+    uint8_t ape[3];
+    uint8_t ape_id[7];
+    uint16_t query_len;
+    uint8_t query[];
+} __attribute__((packed)) ec_gas_initial_request_frame_t;
+
+typedef struct {
+    ec_gas_frame_base_t base;
+    uint16_t status_code;
+    uint16_t gas_comeback_delay;
+    uint8_t ape[3];
+    uint8_t ape_id[7];
+    uint16_t resp_len;
+    uint8_t resp[];
+} __attribute__((packed)) ec_gas_initial_response_frame_t;
+
+// Used to avoid many many if-not-null checks
+#define ASSERT_FALSE(x, ret, errMsg, ...) \
+    if(x) { \
+        fprintf(stderr, errMsg, ## __VA_ARGS__); \
+        return ret; \
+    }
+
+#define ASSERT_TRUE(x, ret, errMsg, ...) ASSERT_FALSE(!(x), ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_NULL(x, ret, errMsg, ...) ASSERT_FALSE(x == NULL, ret, errMsg, ## __VA_ARGS__)
+
+/**
+ * @brief Asserts that a pointer is not NULL, and if it is, frees up to 3 pointers and returns a value
+ * @param x The pointer to check for NULL
+ * @param ret The value to return if x is NULL
+ * @param ptr1 First pointer to free (can be NULL)
+ * @param ptr2 Second pointer to free (can be NULL) 
+ * @param ptr3 Third pointer to free (can be NULL)
+ * @param errMsg Format string for error message
+ * @param ... Additional arguments for the format string
+ */
+#define ASSERT_NOT_NULL_FREE3(x, ret, ptr1, ptr2, ptr3, errMsg, ...) \
+    do { \
+        if(x == NULL) { \
+            fprintf(stderr, errMsg, ## __VA_ARGS__); \
+            void *_tmp1 = (ptr1); \
+            void *_tmp2 = (ptr2); \
+            void *_tmp3 = (ptr3); \
+            if (_tmp1) { \
+                free(_tmp1); \
+            } \
+            if (_tmp2) { \
+                free(_tmp2); \
+            } \
+            if (_tmp3) { \
+                free(_tmp3); \
+            } \
+            return ret; \
+        } \
+    } while (0)
+
+/**
+ * @brief Asserts that a pointer is not NULL, and if it is, frees up to 2 pointers and returns a value
+ */
+#define ASSERT_NOT_NULL_FREE2(x, ret, ptr1, ptr2, errMsg, ...) \
+    ASSERT_NOT_NULL_FREE3(x, ret, ptr1, ptr2, NULL, errMsg, ## __VA_ARGS__)
+
+/**
+ * @brief Asserts that a pointer is not NULL, and if it is, frees one pointer and returns a value
+ */
+#define ASSERT_NOT_NULL_FREE(x, ret, ptr1, errMsg, ...) \
+    ASSERT_NOT_NULL_FREE2(x, ret, ptr1, NULL, errMsg, ## __VA_ARGS__)
+
+
+#define ASSERT_NULL(x, ret, errMsg, ...) ASSERT_TRUE(x == 0, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_EQUALS(x, y, ret, errMsg, ...) ASSERT_TRUE(x == y, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_EQUALS(x, y, ret, errMsg, ...) ASSERT_FALSE(x == y, ret, errMsg, ## __VA_ARGS__)
+
+
+
 typedef enum {
     ec_session_type_cfg,
     ec_session_type_recfg,
 } ec_session_type_t;
 
+/**
+ * @brief The consistent parameters used for all connections between a Configurator and all Enrollees/Agents
+ */
 typedef struct {
     const EC_GROUP *group;
-    const EVP_MD *hashfcn;
-    BIGNUM *x, *y, *prime;
-    BIGNUM *m, *n, *l;
-    EC_POINT *M, *N;
-    BN_CTX *bnctx;
-    EC_KEY *initiator_proto_key;
-    EC_KEY *responder_proto_key;
-    EC_POINT     *responder_proto_pt;
-    EC_POINT     *responder_connector;
-    int group_num;
-    int digestlen;
-    int noncelen;
+    const EVP_MD *hash_fcn;
+    BIGNUM *prime;
+    BN_CTX *bn_ctx;
+    uint16_t digest_len;
+    uint16_t nonce_len;
     int nid;
-    bool mutual;
-    unsigned char initiator_keyhash[SHA512_DIGEST_LENGTH];
-    unsigned char responder_keyhash[SHA512_DIGEST_LENGTH];
-    unsigned char initiator_nonce[SHA512_DIGEST_LENGTH/2];
-    unsigned char responder_nonce[SHA512_DIGEST_LENGTH/2];
+
+
+} ec_persistent_context_t;
+
+/**
+ * @brief The parameters used only during the creation of a connection between a Configurator and a specific Enrollee/Agent
+ */
+typedef struct {
+
+    /**
+     * Initiator, Responder, Enrollee, and Configurator Nonces.
+     * Multiple nonces need to be accounted for at one time.
+     * These are heap allocated but freed after the auth/cfg process is complete.
+     */
+    uint8_t *i_nonce, *r_nonce, *e_nonce, *c_nonce;
+
+    /**
+     * The protocol key pairs for the initiator and responder. These are are exchanged/generated during the auth/cfg process.
+     * This must be freed after the auth/cfg process is complete.
+     * 
+     * P_I, P_R
+     */
+    EC_POINT *public_init_proto_key, *public_resp_proto_key;
+
+    /**
+     * The private protocol keys for the initiator and responder. These are used to generate the shared secret.
+     * These are heap allocated but freed after the auth/cfg process is complete.
+     * 
+     * p_I, p_R
+     */
+    BIGNUM *priv_init_proto_key, *priv_resp_proto_key;
+
+    /**
+     * The generated intermediate keys. These are used multiple times during the auth/cfg process.
+     * These are heap allocated but freed after the auth/cfg process is complete.
+     */
+    uint8_t *k1, *k2, *ke, *bk;
+
+    /**
+     * The EC x coordinate values for the M, N, and (optional) L points.
+     * Once generated, these are used multiple times during the auth/cfg process.
+     */
+    BIGNUM *m, *n, *l;
+
+    /**
+     * A random point on the curve for reconfiguration. The same point is used throughout reconfiguration.
+     * Used from the configurator/controller end as short term memory of which enrollee's it's seen before.
+     * Used by the enrollee to provide that short term memory to the controller.
+     * This must be freed after the reconfiguration process is complete.
+     */
+    EC_POINT *E_Id;
+
+    uint8_t transaction_id;
+
+    /**
+     * Only needs to be known during the auth process to decide wether or not to generate the L key.
+     */
+    bool is_mutual_auth;
+
+} ec_ephemeral_context_t;
+
+/**
+ * @brief The parameters used for a specific connection between a Configurator and a specific Enrollee/Agent
+ */
+typedef struct {
+    /*
+        The protocol key of the Enrollee is used as Network Access key (netAccessKey) later in the DPP Configuration and DPP Introduction protocol
+    */  
+    EC_KEY *net_access_key;
+
+    /* TODO: 
+    Add (if needed):
+        - C-connector
+        - c-sign-key
+        - privacy-protection-key (ppk)
+
+    */
+
+    ec_ephemeral_context_t eph_ctx;
+} ec_connection_context_t;
+
+
+
+/*
+REMOVED:
+    -k1, k2, ke. These are only generated once per device per authentication session (and it should be that way)
+        unsigned char responder_nonce[SHA512_DIGEST_LENGTH/2];
     unsigned char enrollee_nonce[SHA512_DIGEST_LENGTH/2];
-    unsigned char k1[SHA512_DIGEST_LENGTH];
-    unsigned char k2[SHA512_DIGEST_LENGTH];
-    unsigned char ke[SHA512_DIGEST_LENGTH];
-    unsigned char rauth[SHA512_DIGEST_LENGTH];
-    unsigned char iauth[SHA512_DIGEST_LENGTH];
-} ec_params_t;
+*/
 
 typedef struct {
 
     // Baseline static, DPP URI data
     unsigned int version;
-    int  ec_freqs[DPP_MAX_EN_CHANNELS];
+    unsigned int  ec_freqs[DPP_MAX_EN_CHANNELS];
     mac_address_t   mac_addr;
     ec_session_type_t   type;
 
-    // Updated data
-    EC_KEY *initiator_boot_key; 
-    EC_KEY *responder_boot_key;
+    /*
+    Initiator/Configurator bootstrapping key. (ALWAYS REQUIRED on controller, OPTIONAL on enrollee)
+        - If this is the Controller, then this key is stored on the Controller. 
+        - If this is the Enrollee, then this key is required for "mutual authentication" and must be recieved via an out-of-band mechanism from the controller.
+    */
+    const EC_KEY *initiator_boot_key; 
+    /*
+    Responder/Enrollee bootstrapping key. (REQUIRED)
+        - If this is the Controller, then this key was recieved out-of-band from the Enrollee in the DPP URI
+        - If this is the Enrollee, then this key is stored locally.
+    */
+    const EC_KEY *responder_boot_key;
 } ec_data_t;
 
 #ifdef __cplusplus
