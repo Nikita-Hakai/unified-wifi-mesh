@@ -56,6 +56,20 @@ extern "C"
 #define MAC2STR(x) static_cast<unsigned int>((x)[0]), static_cast<unsigned int>((x)[1]), static_cast<unsigned int>((x)[2]), \
                    static_cast<unsigned int>((x)[3]), static_cast<unsigned int>((x)[4]), static_cast<unsigned int>((x)[5])
 
+
+// For self-documenting code/runtime
+#define SPEC_TODO_NOT_FATAL(SPEC, VERSION, SECTION, TEXT) \
+    do { \
+        fprintf(stderr, "[TODO] Spec: %s v%s, Section: %s\nText: %s\n", SPEC, VERSION, SECTION, TEXT); \
+    } while (0)
+
+
+#define SPEC_TODO_FATAL(SPEC, VERSION, SECTION, TEXT) \
+    do { \
+        fprintf(stderr, "[TODO - FATAL] Spec: %s v%s, Section: %s\nText: %s\n", SPEC, VERSION, SECTION, TEXT); \
+        assert(false); \
+    } while (0)
+
 static const uint8_t BROADCAST_MAC_ADDR[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
 // EasyConnect 8.3.2
@@ -244,14 +258,14 @@ typedef struct {
 } __attribute__((packed)) ec_gas_initial_response_frame_t;
 
 // Used to avoid many many if-not-null checks
-#define ASSERT_FALSE(x, ret, errMsg, ...) \
+#define ASSERT_MSG_FALSE(x, ret, errMsg, ...) \
     if(x) { \
         fprintf(stderr, errMsg, ## __VA_ARGS__); \
         return ret; \
     }
 
-#define ASSERT_TRUE(x, ret, errMsg, ...) ASSERT_FALSE(!(x), ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_NOT_NULL(x, ret, errMsg, ...) ASSERT_FALSE(x == NULL, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_MSG_TRUE(x, ret, errMsg, ...) ASSERT_MSG_FALSE(!(x), ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_NULL(x, ret, errMsg, ...) ASSERT_MSG_FALSE(x == NULL, ret, errMsg, ## __VA_ARGS__)
 
 /**
  * @brief Asserts that a pointer is not NULL, and if it is, frees up to 3 pointers and returns a value
@@ -296,11 +310,17 @@ typedef struct {
     ASSERT_NOT_NULL_FREE2(x, ret, ptr1, NULL, errMsg, ## __VA_ARGS__)
 
 
-#define ASSERT_NULL(x, ret, errMsg, ...) ASSERT_TRUE(x == 0, ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_EQUALS(x, y, ret, errMsg, ...) ASSERT_TRUE(x == y, ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_NOT_EQUALS(x, y, ret, errMsg, ...) ASSERT_FALSE(x == y, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NULL(x, ret, errMsg, ...) ASSERT_MSG_TRUE(x == 0, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_EQUALS(x, y, ret, errMsg, ...) ASSERT_MSG_TRUE(x == y, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_EQUALS(x, y, ret, errMsg, ...) ASSERT_MSG_FALSE(x == y, ret, errMsg, ## __VA_ARGS__)
 
-
+#ifndef SSL_KEY
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+#define SSL_KEY EC_KEY
+#else
+#define SSL_KEY EVP_PKEY
+#endif
+#endif
 
 typedef enum {
     ec_session_type_cfg,
@@ -311,13 +331,69 @@ typedef enum {
  * @brief The consistent parameters used for all connections between a Configurator and all Enrollees/Agents
  */
 typedef struct {
+// BEGIN: Variables that are configured once and persist throughout the lifetime of the program
     const EC_GROUP *group;
     const EVP_MD *hash_fcn;
+    BIGNUM *order;
     BIGNUM *prime;
     BN_CTX *bn_ctx;
     uint16_t digest_len;
     uint16_t nonce_len;
     int nid;
+
+//BEGIN:  Variables that persist after configuration to be used during re-configuration
+
+    /**
+     * Privacy-protection-key, the Configurator public privacy protection key.
+     * Both the Configurator and Enrollee have a copy of this key after configuration.
+     */
+    EC_POINT* ppk;
+
+    /**
+     * Configurator Signing Key.
+     * Both the Configurator and Enrollee have a copy of this key after configuration.
+     */
+    SSL_KEY* C_signing_key;
+
+    /**
+     * @brief Can be the Configurator's Connector or the Enroller's connector based on context.
+     * NULL terminated string, NULL if not set.
+     * @paragraph
+     * EasyConnect 4.2
+     *   A Connector is encoded as a JSON Web Signature (JWS) Compact Serialization of a JWS Protected Header (describing
+     *   the encoded object and signature), a JWS Payload, and a signature. JSON is a data interchange format (see [12]) that
+     *   encodes data as a series of data types (strings, numbers, Booleans, and null) and structure types, formatted as
+     *   name/value pairs.
+     *   ...
+     *   The JWS Compact Serialization is a base64url encoding of each component, with components separated by a dot (“.”).
+     *   The JWS Protected Header is a JSON object that describes:
+     *   • The type of object in the JWS Payload specified as "dppCon"
+     *   • The identifier ("kid" ) for the key used to generate the signature
+     *   • The algorithm ("alg") used to generate a signature
+     *   The supported algorithms are given in [16]. All devices supporting DPP shall support the ES256 algorithm. Key and nonce
+     *   lengths shall be as specified in Table 4. The curve used for the signature may be different from the one used in DPP
+     *   Bootstrapping and DPP Authentication protocols.
+     *   ...
+     * 4.2.1 Connector Signing
+     *   The Configurator possesses a signing key pair (c-sign-key, C-sign-key). The c-sign-key is used by the Configurator to sign
+     *   Connectors, whereas the C-sign-key is used by provisioned devices to verify Connectors of other devices are signed by
+     *   the same Configurator. Connectors signed with the same c-sign-key manage connections in the same network.
+     *   The Configurator sets the public key corresponding to the enrollee protocol key as the **netAccessKey** in the Connector
+     *   data structure, and assigns the DPP Connector attribute depending on the Peer devices with which the enrollee will be
+     *   provisioned to connect.
+     * 4.2.1.1 Digital Signature Computation
+     *   The procedures to compute the digital signature of a Connector and the procedure to verify such signature are described
+     *   in FIPS-186-4 [19] and are specified in this section.  The curve used for the signature may be different from the one used in DPP Bootstrapping and DPP Authentication protocols.
+     *   The signature is performed over the concatenation of the base64url encodings of both the JWS Protected Header and the JWS Payload, separated by a dot (“.”), see section 5.1 of [14].
+     *   The data passed to the signature algorithm is:
+     *   
+     *   base64url(UTF8(JWS Protected Header)) | ‘.’ | base64url(JWS Payload)
+     *    
+     *   where UTF8(s) is the UTF8 representation of the string “s”.
+     *   If “sig” is the result of the signature, the Connector is then:
+     *   base64url(UTF8(JWS Protected Header)) | ‘.’ | base64url(JWS Payload) | ‘.’ | base64url(sig)
+     */
+    const char* connector;
 
 
 } ec_persistent_context_t;
@@ -363,6 +439,7 @@ typedef struct {
     BIGNUM *m, *n, *l;
 
     /**
+     * EasyConnect 6.5.2
      * A random point on the curve for reconfiguration. The same point is used throughout reconfiguration.
      * Used from the configurator/controller end as short term memory of which enrollee's it's seen before.
      * Used by the enrollee to provide that short term memory to the controller.
@@ -386,7 +463,7 @@ typedef struct {
     /*
         The protocol key of the Enrollee is used as Network Access key (netAccessKey) later in the DPP Configuration and DPP Introduction protocol
     */  
-    EC_KEY *net_access_key;
+   SSL_KEY *net_access_key;
 
     /* TODO: 
     Add (if needed):
@@ -398,15 +475,6 @@ typedef struct {
 
     ec_ephemeral_context_t eph_ctx;
 } ec_connection_context_t;
-
-
-
-/*
-REMOVED:
-    -k1, k2, ke. These are only generated once per device per authentication session (and it should be that way)
-        unsigned char responder_nonce[SHA512_DIGEST_LENGTH/2];
-    unsigned char enrollee_nonce[SHA512_DIGEST_LENGTH/2];
-*/
 
 typedef struct {
 
@@ -421,13 +489,18 @@ typedef struct {
         - If this is the Controller, then this key is stored on the Controller. 
         - If this is the Enrollee, then this key is required for "mutual authentication" and must be recieved via an out-of-band mechanism from the controller.
     */
-    const EC_KEY *initiator_boot_key; 
+    const SSL_KEY *initiator_boot_key; 
     /*
     Responder/Enrollee bootstrapping key. (REQUIRED)
         - If this is the Controller, then this key was recieved out-of-band from the Enrollee in the DPP URI
         - If this is the Enrollee, then this key is stored locally.
     */
-    const EC_KEY *responder_boot_key;
+    const SSL_KEY *responder_boot_key;
+    
+    // B_I, B_R
+    EC_POINT *init_pub_boot_key, *resp_pub_boot_key;
+    // b_I, b_R
+    BIGNUM *init_priv_boot_key, *resp_priv_boot_key;
 } ec_data_t;
 
 #ifdef __cplusplus

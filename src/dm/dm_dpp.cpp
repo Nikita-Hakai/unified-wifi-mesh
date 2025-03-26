@@ -45,7 +45,7 @@
 
 int dm_dpp_t::analyze_config(const cJSON *obj, void *parent, em_cmd_t *pcmd[], em_cmd_params_t *param, void* user_param)
 {
-	unsigned int num = 0;
+	int num = 0;
 	dm_easy_mesh_t	dm;
 
     // Decodes JSON `obj` into `m_dpp_info`
@@ -62,11 +62,7 @@ int dm_dpp_t::analyze_config(const cJSON *obj, void *parent, em_cmd_t *pcmd[], e
 
 int dm_dpp_t::decode(const cJSON *obj, void *parent_id, void* user_info)
 {
-    cJSON *tmp, *tmp_arr;
-    mac_addr_str_t  mac_str;
-    unsigned int j;
-
-    char *net_id = (char *)parent_id;
+    cJSON *tmp;
 
     memset(&m_dpp_info, 0, sizeof(ec_data_t));
 
@@ -74,7 +70,7 @@ int dm_dpp_t::decode(const cJSON *obj, void *parent_id, void* user_info)
 		
     // Get version
     if ((tmp = cJSON_GetObjectItem(obj, "V:")) != NULL) {
-	    m_dpp_info.version = cJSON_GetNumberValue(tmp);
+	    m_dpp_info.version = static_cast<unsigned int> (cJSON_GetNumberValue(tmp));
     }
     // Get MAC address
     if ((tmp = cJSON_GetObjectItem(obj, "M:")) != NULL && cJSON_IsString(tmp)) {
@@ -107,9 +103,9 @@ int dm_dpp_t::decode(const cJSON *obj, void *parent_id, void* user_info)
         while (std::getline(ss, pair, ',')) {
             size_t slash_pos = pair.find('/');
             if (slash_pos != std::string::npos) {
-                uint8_t op_class = std::stoi(pair.substr(0, slash_pos));
-                uint8_t channel = std::stoi(pair.substr(slash_pos + 1));
-                int freq = util::em_chan_to_freq(op_class, channel, std::string(country_code));
+                int op_class = std::stoi(pair.substr(0, slash_pos));
+                int channel = std::stoi(pair.substr(slash_pos + 1));
+                int freq = util::em_chan_to_freq(static_cast<uint8_t> (op_class),static_cast<uint8_t> (channel), std::string(country_code));
                 if (freq > 0) {
                     m_dpp_info.ec_freqs[pair_idx] = static_cast<unsigned int>(freq);
                     pair_idx++;
@@ -135,17 +131,20 @@ void dm_dpp_t::encode(cJSON *obj)
 }
 
 
-bool ec_pub_keys_equal(const EC_KEY* key1, const EC_KEY* key2) {
+bool ec_pub_keys_equal(const SSL_KEY* key1, const SSL_KEY* key2) {
     if (!key1 || !key2) return false;
     
-    const EC_POINT* point1 = EC_KEY_get0_public_key(key1);
-    const EC_POINT* point2 = EC_KEY_get0_public_key(key2);
+    const EC_POINT* point1 = em_crypto_t::get_pub_key_point(key1);
+    const EC_POINT* point2 = em_crypto_t::get_pub_key_point(key2);
     
     if (!point1 || !point2) return false;
     
-    // Compare just the public points
-    const EC_GROUP* group = EC_KEY_get0_group(key1);
-    return (EC_POINT_cmp(group, point1, point2, NULL) == 0);
+    const EC_GROUP* group1 = em_crypto_t::get_key_group(key1);
+    const EC_GROUP* group2 = em_crypto_t::get_key_group(key2);
+
+    if (EC_GROUP_cmp(group1, group2, NULL) != 0) return false;
+
+    return (EC_POINT_cmp(group1, point1, point2, NULL) == 0);
 }
 
 bool dm_dpp_t::operator == (const dm_dpp_t& obj)

@@ -7,6 +7,7 @@
 #include <utility>
 #include <memory>
 #include <vector>
+#include <optional>
 
 namespace easyconnect {
 
@@ -27,9 +28,9 @@ namespace easyconnect {
 class ec_crypto {
 public:
 
-    static int hkdf(const EVP_MD *h, int skip, uint8_t *ikm, int ikmlen, 
-        uint8_t *salt, int saltlen, uint8_t *info, size_t infolen, 
-        uint8_t *okm, int okmlen);
+    static size_t hkdf(const EVP_MD *h, bool skip_extract, uint8_t *ikm, size_t ikmlen, 
+        uint8_t *salt, size_t saltlen, uint8_t *info, size_t infolen, 
+        uint8_t *okm, size_t okmlen);
 
 
     /**
@@ -40,7 +41,7 @@ public:
      * @param prefix The optional prefix to add to the key before hashing (NULL by default)
      * @return int The length of the hash
      */
-    static uint8_t* compute_key_hash(const EC_KEY *key, const char *prefix = NULL);
+    static uint8_t* compute_key_hash(const SSL_KEY *key, const char *prefix = NULL);
     
     /**
      * @brief Initialize the persistent context params with the bootstrapping key's group as a basis
@@ -49,7 +50,7 @@ public:
      * @param boot_key The bootstrapping key to use as a basis
      * @return bool true if successful, false otherwise
      */
-    static bool init_persistent_ctx(ec_persistent_context_t& p_ctx, const EC_KEY* boot_key);
+    static bool init_persistent_ctx(ec_persistent_context_t& p_ctx, const SSL_KEY *boot_key);
 
     /**
      * @brief Compute the hash of the provided buffer
@@ -60,7 +61,7 @@ public:
     static uint8_t* compute_hash(ec_persistent_context_t& p_ctx, const easyconnect::hash_buffer_t& hashing_elements_buffer);
 
 
-    static int compute_ke(ec_persistent_context_t& p_ctx, ec_ephemeral_context_t* e_ctx, uint8_t *ke_buffer);
+    static size_t compute_ke(ec_persistent_context_t& p_ctx, ec_ephemeral_context_t* e_ctx, uint8_t *ke_buffer);
 
     /**
      * @brief Abstracted HKDF computation that handles both simple and complex inputs
@@ -79,9 +80,9 @@ public:
      * 
      * @return Length of the output key on success, 0 on failure
      */
-    static int compute_hkdf_key(ec_persistent_context_t& p_ctx, uint8_t *key_out, int key_out_len, const char *info_str,
+    static size_t compute_hkdf_key(ec_persistent_context_t& p_ctx, uint8_t *key_out, size_t key_out_len, const char *info_str,
         const BIGNUM **x_val_inputs, int x_val_count, 
-        uint8_t *raw_salt, int raw_salt_len);
+        uint8_t *raw_salt, size_t raw_salt_len);
 
     /**
      * Calculates L = ((b_R + p_R) modulo q) * B_I then gets the x-coordinate of the result
@@ -96,10 +97,13 @@ public:
 
 
     static inline BIGNUM* get_ec_x(ec_persistent_context_t& p_ctx, const EC_POINT *point) {
+        if (point == NULL) return NULL;
+
         BIGNUM *x = BN_new();
-        if (EC_POINT_get_affine_coordinates_GFp(p_ctx.group, point,
+        if (EC_POINT_get_affine_coordinates(p_ctx.group, point,
                     x, NULL, p_ctx.bn_ctx) == 0) {
             printf("%s:%d unable to get x, y of the curve\n", __func__, __LINE__);
+            BN_free(x);
             return NULL;
         }
         return x;
@@ -194,6 +198,55 @@ public:
     }
 
 
+    /**
+     * @brief Get the TLS group ID from an NID
+     * 
+     * Reference: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
+     * 
+     * @param nid The NID to get the ID from
+     * @return uint16_t The TLS group ID, or UINT16_MAX if the group is unknown or unsupported
+     */
+    static inline uint16_t get_tls_group_id_from_nid(int nid) {
+
+        switch (nid) {
+            case NID_X9_62_prime256v1:  /* same as NID_secp256r1 */
+                return 23;  /* secp256r1 (NIST P-256) */
+            case NID_secp384r1:
+                return 24;  /* secp384r1 (NIST P-384) */
+            case NID_secp521r1:
+                return 25;  /* secp521r1 (NIST P-521) */
+            case NID_X9_62_prime192v1:  /* same as NID_secp192r1 */
+                return 19;  /* secp192r1 */
+            case NID_secp224r1:
+                return 21;  /* secp224r1 */
+            case NID_brainpoolP256r1:
+                return 26;  /* brainpoolP256r1 */
+            case NID_brainpoolP384r1:
+                return 27;  /* brainpoolP384r1 */
+            case NID_brainpoolP512r1:
+                return 28;  /* brainpoolP512r1 */
+            case NID_X25519:
+                return 29;  /* x25519 */
+            case NID_X448:
+                return 30;  /* x448 */
+            default:
+                return UINT16_MAX;  /* Unknown or unsupported curve */
+        }
+    }
+
+    /**
+     * @brief Get the TLS group ID from an EC_GROUP
+     * 
+     * Reference: https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
+     * 
+     * @param group The EC_GROUP to get the ID from
+     * @return uint16_t The TLS group ID, or UINT16_MAX if the group is unknown or unsupported
+     */
+    static inline uint16_t get_tls_group_id_from_ec_group(const EC_GROUP *group) {
+        int nid = EC_GROUP_get_curve_name(group);
+        
+        return get_tls_group_id_from_nid(nid);
+    }
 
     static void print_bignum (BIGNUM *bn);
     static void print_ec_point (const EC_GROUP *group, BN_CTX *bnctx, EC_POINT *point);
@@ -205,14 +258,23 @@ public:
         free(buff);
     };
 
+    static inline void rand_zero(uint8_t *buff, size_t len) {
+        if (buff == NULL) return;
+        RAND_bytes(buff, static_cast<int>(len));
+        memset(buff, 0, len);
+    };
+
     /**
-     * @brief Free an ephemeral context by randomizing, zeroing, and freeing all memory
+     * @brief Free an ephemeral context by randomizing, zeroing, and freeing all memory 
+     * Does not attempt to free the `ctx` pointer which may be statically allocated.
      * 
      * @param ctx The ephemeral context to free
      * @param nonce_len The length of the nonces in the context
      * @param digest_len The length of the digests/keys in the context
      */
     static inline void free_ephemeral_context(ec_ephemeral_context_t* ctx, uint16_t nonce_len, uint16_t digest_len) {
+
+        if (!ctx) return;
 
         if (ctx->public_init_proto_key) EC_POINT_free(ctx->public_init_proto_key);
         if (ctx->public_resp_proto_key) EC_POINT_free(ctx->public_resp_proto_key);
@@ -231,8 +293,90 @@ public:
         if (ctx->ke) rand_zero_free(ctx->ke, static_cast<size_t> (digest_len));
         if (ctx->bk) rand_zero_free(ctx->bk, static_cast<size_t> (digest_len));
 
-        rand_zero_free(reinterpret_cast<uint8_t*>(ctx), sizeof(ec_ephemeral_context_t));
+        rand_zero(reinterpret_cast<uint8_t*>(ctx), sizeof(ec_ephemeral_context_t));
     }
+
+// START: Connector methods
+
+    /**
+     * @brief Split and decode a connector into its constituent parts
+     * 
+     * @param conn The connector to split and decode
+     * @return std::optional<std::vector<cJSON*>> A vector of cJSON objects containing the decoded parts, or nullopt on failure
+     * 
+     * @note The caller is responsible for freeing the cJSON objects
+     */
+    static std::optional<std::vector<cJSON*>> split_decode_connector(const char* conn);
+
+
+    /**
+     * @brief Generate a connector from JWS header, payload, and the key to create the signature with
+     * 
+     * @param jws_header The JWS Protected Header
+     * @param jws_payload The JWS Payload
+     * @param sign_key The key to sign the connector with (creating 'sig')
+     * @return const char* The generated connector, or NULL on failure
+     * 
+     * @note The caller is responsible for freeing the returned memory
+     * 
+     * @paragraph
+     * EasyConnect 4.2.1.1 Digital Signature Computation
+     *   The procedures to compute the digital signature of a Connector and the procedure to verify such signature are described
+     *   in FIPS-186-4 [19] and are specified in this section.  The curve used for the signature may be different from the one used in DPP Bootstrapping and DPP Authentication protocols.
+     *   The signature is performed over the concatenation of the base64url encodings of both the JWS Protected Header and the JWS Payload, separated by a dot (“.”), see section 5.1 of [14].
+     *   The data passed to the signature algorithm is:
+     *   
+     *   base64url(UTF8(JWS Protected Header)) | ‘.’ | base64url(JWS Payload)
+     *    
+     *   where UTF8(s) is the UTF8 representation of the string “s”.
+     *   If “sig” is the result of the signature, the Connector is then:
+     *   base64url(UTF8(JWS Protected Header)) | ‘.’ | base64url(JWS Payload) | ‘.’ | base64url(sig)
+     */
+    static const char* generate_connector(const cJSON* jws_header, const cJSON* jws_payload, EVP_PKEY* sign_key);
+
+    /**
+     * @brief Get the JWS Protected Header from a connector
+     * 
+     * @param conn The connector to extract the header from
+     * @return cJSON* The JWS Protected Header, or nullopt on failure
+     * 
+     * @note The caller is responsible for freeing the cJSON object
+     */
+    static inline std::optional<cJSON*> get_jws_header(const char* conn) {
+        auto parts = split_decode_connector(conn);
+        if (!parts.has_value()) return std::nullopt;
+        return parts.value()[0]; // JWS header is the first part
+    }
+
+    /** 
+     * @brief Get the JWS Payload from a connector
+     * 
+     * @param conn The connector to extract the payload from
+     * @return cJSON* The JWS Payload, or nullopt on failure
+     * 
+     * @note The caller is responsible for freeing the cJSON object
+     */
+    static inline std::optional<cJSON*> get_jws_payload(const char* conn) {
+        auto parts = split_decode_connector(conn);
+        if (!parts.has_value()) return std::nullopt;
+        return parts.value()[1]; // JWS payload is the second part
+    }
+
+    /**
+     * @brief Performs connector validation and gets the JWS Signature from a connector
+     * 
+     * @param conn The connector to extract the signature from
+     * @return cJSON* The JWS Signature, or nullopt on failure
+     * 
+     * @note The caller is responsible for freeing the cJSON object
+     */
+    static inline std::optional<cJSON*> get_jws_signature(const char* conn) {
+        auto parts = split_decode_connector(conn);
+        if (!parts.has_value()) return std::nullopt;
+        return parts.value()[2]; // JWS signature is the third part
+    }
+
+
 
 };
 

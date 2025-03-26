@@ -1860,7 +1860,9 @@ typedef enum {
     em_state_agent_onewifi_bssconfig_ind,
 	em_state_agent_autoconfig_renew_pending,
     em_state_agent_topo_synchronized,
+	em_state_agent_channel_pref_query,
 	em_state_agent_channel_selection_pending,
+	em_state_agent_channel_select_configuration_pending,
     em_state_agent_channel_report_pending,
 	em_state_agent_channel_scan_result_pending,
     em_state_agent_configured,
@@ -1869,7 +1871,6 @@ typedef enum {
     em_state_agent_topology_notify,
     em_state_agent_ap_cap_report,
     em_state_agent_client_cap_report,
-    em_state_agent_channel_pref_query,
     em_state_agent_sta_link_metrics,
     em_state_agent_steer_btm_res_pending,
     em_state_agent_beacon_report_pending,
@@ -3068,6 +3069,14 @@ typedef struct {
 	em_editor_callback_t	cb_func;
 	em_cli_type_t	cli_type;
 } em_cli_params_t;
+
+#ifndef SSL_KEY
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+#define SSL_KEY EC_KEY
+#else
+#define SSL_KEY EVP_PKEY
+#endif
+#endif
 
 #ifdef __cplusplus
 }
