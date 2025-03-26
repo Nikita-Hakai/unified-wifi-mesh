@@ -1025,6 +1025,10 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
         case em_msg_type_client_steering_req:
             tlv = em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                 len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_tlv(em_tlv_type_profile2_steering_request);
+            if (tlv == NULL) {
+                tlv = em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
+                    len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_tlv(em_tlv_type_steering_request);
+            }
 
             dm_easy_mesh_t::macbytes_to_string(tlv->value, mac_str1);
             //printf("\n%s:%d: Rcvd Client steering request for bss %s\n", __func__, __LINE__, mac_str1);

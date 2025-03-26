@@ -787,9 +787,9 @@ typedef struct {
     unsigned short steering_opportunity_window;
     unsigned short btm_dissoc_timer;
     unsigned char sta_list_count;
-    mac_address_t *sta_mac_addr;
+    mac_address_t sta_mac_addr[16];
     unsigned char target_bssid_list_count;
-    em_steering_req_bss_list_t *bss_list;
+    em_steering_req_bss_list_t bss_list[16];
 }__attribute__((__packed__)) em_steering_req_t;
 
 typedef struct {
@@ -814,12 +814,9 @@ typedef struct {
 }__attribute__((__packed__)) em_80211_neighbor_report_t;
 
 typedef struct {
-    //todo: bss_termination_duration;
-    //session_info_url;
     em_80211_neighbor_report_t bss_transition_cand_list[0];
 }__attribute__((__packed__)) em_80211_btm_req_var_t;
 
-//NH_Mmod needed
 typedef struct {
     em_steering_req_t agile_multiband;
     unsigned char reason_code;

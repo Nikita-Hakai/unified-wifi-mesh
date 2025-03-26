@@ -29,7 +29,7 @@ class em_steering_t {
     int send_client_steering_req_msg();
     int send_client_assoc_ctrl_req_msg();
     int send_client_assoc_ctrl_req_msg(em_client_assoc_ctrl_req_t *assoc_ctrl);
-    int send_client_steering_req_msg(em_steering_req_t *req, int length, bool if_multiband);
+    int send_client_steering_req_msg(em_steering_req_t *req, bool if_multiband);
     int send_btm_report_msg(mac_address_t sta, bssid_t bss);
     int send_1905_ack_message(mac_addr_t sta_mac);
     int handle_client_steering_req(unsigned char *buff, unsigned int len, unsigned int type);
@@ -37,7 +37,7 @@ class em_steering_t {
     int handle_ack_msg(unsigned char *buff, unsigned int len);
     short create_error_code_tlv(unsigned char *buff, int val, mac_addr_t sta_mac);
     short create_btm_report_tlv(unsigned char *buff);
-    short create_btm_request_tlv(unsigned char *buff, em_steering_req_t *req, int length, bool if_multiband);
+    short create_btm_request_tlv(unsigned char *buff, em_steering_req_t *req, bool if_multiband);
 
 public:
 	virtual em_mgr_t *get_mgr() = 0;
