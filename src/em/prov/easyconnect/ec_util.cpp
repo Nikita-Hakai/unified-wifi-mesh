@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <functional>
 #include <arpa/inet.h>
+#include <cstddef>
 
 #include "ec_util.h"
 #include "util.h"
@@ -99,22 +100,28 @@ uint8_t *ec_util::add_wrapped_data_attr(uint8_t *frame, size_t frame_len, uint8_
 bool use_aad, uint8_t* key, std::function<std::pair<uint8_t*, uint16_t>()> create_wrap_attribs) {
     siv_ctx ctx;
 
-    // Initialize AES-SIV context
-// TODO: Come back to
-    // switch(params.digestlen) {
-    //     case SHA256_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_256);
-    //         break;
-    //     case SHA384_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_384);
-    //         break;
-    //     case SHA512_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_512);
-    //         break;
-    //     default:
-    //         printf("%s:%d Unknown digest length\n", __func__, __LINE__);
-    //         return NULL;
-    // }
+    // NOTE: HARDCODING AS SIV_256 FOR NOW
+    //  The spec technically only specifies P-256 so technically this is all that's allowed but for future proofing it's better to add more 
+    //  I just want to avoid adding the digest_len as a parameter...
+    siv_init(&ctx, key, SIV_256);
+
+    /*
+    Initialize AES-SIV context
+    switch(m_params.digestlen) {
+        case SHA256_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_256);
+            break;
+        case SHA384_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_384);
+            break;
+        case SHA512_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_512);
+            break;
+        default:
+            printf("%s:%d Unknown digest length\n", __func__, __LINE__);
+            return {nullptr, 0};
+    }
+    */
 
     // Use the provided function to create wrap_attribs and wrapped_len
     auto [wrap_attribs, wrapped_len] = create_wrap_attribs();
@@ -160,23 +167,35 @@ uint8_t* ec_util::add_wrapped_data_attr(ec_frame_t *frame, uint8_t* frame_attrib
 
 std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t* wrapped_attrib, ec_frame_t *frame, bool uses_aad, uint8_t* key)
 {
+    return unwrap_wrapped_attrib(wrapped_attrib, reinterpret_cast<uint8_t*>(frame), sizeof(ec_frame_t), frame->attributes, uses_aad, key);
+}
+
+std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, bool uses_aad, uint8_t *key)
+{
     siv_ctx ctx;
 
-    // Initialize AES-SIV context
-    // switch(m_params.digestlen) {
-    //     case SHA256_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_256);
-    //         break;
-    //     case SHA384_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_384);
-    //         break;
-    //     case SHA512_DIGEST_LENGTH:
-    //         siv_init(&ctx, key, SIV_512);
-    //         break;
-    //     default:
-    //         printf("%s:%d Unknown digest length\n", __func__, __LINE__);
-    //         return std::pair<uint8_t*, size_t>(NULL, 0);
-    // }
+    // NOTE: HARDCODING AS SIV_256 FOR NOW
+    //  The spec technically only specifies P-256 so technically this is all that's allowed but for future proofing it's better to add more 
+    //  I just want to avoid adding the digest_len as a parameter...
+    siv_init(&ctx, key, SIV_256);
+
+    /*
+    Initialize AES-SIV context
+    switch(m_params.digestlen) {
+        case SHA256_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_256);
+            break;
+        case SHA384_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_384);
+            break;
+        case SHA512_DIGEST_LENGTH:
+            siv_init(&ctx, key, SIV_512);
+            break;
+        default:
+            printf("%s:%d Unknown digest length\n", __func__, __LINE__);
+            return {nullptr, 0};
+    }
+    */
 
     uint8_t* wrapped_ciphertext = wrapped_attrib->data + AES_BLOCK_SIZE;
     uint16_t wrapped_len = wrapped_attrib->length - AES_BLOCK_SIZE;
@@ -186,22 +205,25 @@ std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t* wra
     if (uses_aad) {
         if (frame == NULL) {
             printf("%s:%d: AAD input is NULL, AAD decryption failed!\n", __func__, __LINE__);
-            return std::pair<uint8_t*, uint16_t>(NULL, 0);
+            return {nullptr, 0};
         }
-        result = siv_decrypt(&ctx, wrapped_ciphertext, unwrap_attribs, wrapped_len, wrapped_attrib->data, 2,
-            frame, sizeof(ec_frame_t),
-            frame->attributes, (reinterpret_cast<uint8_t*>(wrapped_attrib) - frame->attributes)); // Non-wrapped attributes
+        size_t pre_wrapped_attribs_size = static_cast<size_t>(reinterpret_cast<uint8_t*>(wrapped_attrib) - frame_attribs);
+        result = siv_decrypt(&ctx, wrapped_ciphertext, unwrap_attribs, wrapped_len,
+                             wrapped_attrib->data, 2,
+                             frame, frame_len,
+                             frame_attribs, pre_wrapped_attribs_size);
     } else {
-        result = siv_decrypt(&ctx, wrapped_ciphertext, unwrap_attribs, wrapped_len, wrapped_attrib->data, 0);
+        result = siv_decrypt(&ctx, wrapped_ciphertext, unwrap_attribs, wrapped_len,
+                             wrapped_attrib->data, 0);
     }
 
     if (result < 0) {
         printf("%s:%d: Failed to decrypt and authenticate wrapped data\n", __func__, __LINE__);
         delete[] unwrap_attribs;
-        return std::pair<uint8_t*, uint16_t>(NULL, 0);
+        return {nullptr, 0};
     }
 
-    return std::pair<uint8_t*, uint16_t>(unwrap_attribs, wrapped_len);
+    return {unwrap_attribs, wrapped_len};
 }
 
 bool ec_util::parse_dpp_chirp_tlv(em_dpp_chirp_value_t* chirp_tlv, uint16_t chirp_tlv_len, mac_addr_t *mac, uint8_t **hash, uint8_t *hash_len)
@@ -237,6 +259,33 @@ bool ec_util::parse_dpp_chirp_tlv(em_dpp_chirp_value_t* chirp_tlv, uint16_t chir
     memcpy(*hash, data_ptr, *hash_len);
 
     return true;
+}
+
+std::pair<em_dpp_chirp_value_t*, uint16_t> ec_util::create_dpp_chirp_tlv(bool mac_present, bool hash_validity, mac_addr_t dest_mac)
+{
+    if (dest_mac == NULL && mac_present) {
+        printf("%s:%d: mac_present argument is true, but dest_mac was not provided\n", __func__, __LINE__);
+        return {};
+    }
+
+    size_t data_size = sizeof(em_dpp_chirp_value_t);
+    if (dest_mac != NULL) {
+        data_size += sizeof(mac_addr_t);
+    }
+    em_dpp_chirp_value_t *chirp_tlv = NULL;
+    if ((chirp_tlv = static_cast<em_dpp_chirp_value_t *>(calloc(data_size, 1))) == NULL){
+        fprintf(stderr, "Failed to allocate memory\n");
+        return {};
+    }
+
+    (chirp_tlv)->mac_present = mac_present;
+    (chirp_tlv)->hash_valid = hash_validity;
+
+    if (dest_mac != NULL) {
+        memcpy((chirp_tlv)->data, dest_mac, sizeof(mac_addr_t));
+    }
+
+    return std::pair<em_dpp_chirp_value_t*, uint16_t>(chirp_tlv, static_cast<uint16_t>(data_size));
 }
 
 bool ec_util::parse_encap_dpp_tlv(em_encap_dpp_t *encap_tlv, uint16_t encap_tlv_len, mac_addr_t *dest_mac, uint8_t *frame_type, uint8_t **encap_frame, uint16_t *encap_frame_len)
@@ -347,6 +396,11 @@ std::string ec_util::hash_to_hex_string(const uint8_t *hash, size_t hash_len) {
     }
     output[hash_len * 2] = '\0'; // Null-terminate the string
     return std::string(output);
+}
+
+std::string ec_util::hash_to_hex_string(const std::vector<uint8_t>& hash)
+{
+    return hash_to_hex_string(hash.data(), hash.size());
 }
 
 
