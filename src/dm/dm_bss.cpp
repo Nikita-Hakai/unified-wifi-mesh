@@ -301,6 +301,7 @@ void dm_bss_t::operator = (const dm_bss_t& obj)
     memcpy(this->m_bss_info.vendor_elements, obj.m_bss_info.vendor_elements, sizeof(this->m_bss_info.vendor_elements));
     this->m_bss_info.vendor_elements_len = obj.m_bss_info.vendor_elements_len;
     this->m_bss_info.connect_status = obj.m_bss_info.connect_status;
+    memcpy(&this->m_bss_info.sta_mac, &obj.m_bss_info.sta_mac, sizeof(mac_address_t));
 }
 
 
@@ -342,6 +343,7 @@ bool dm_bss_t::operator == (const dm_bss_t& obj)
     ret += (memcmp(this->m_bss_info.vendor_elements, obj.m_bss_info.vendor_elements, sizeof(this->m_bss_info.vendor_elements)) != 0);
     ret += !(this->m_bss_info.vendor_elements_len == obj.m_bss_info.vendor_elements_len);
     ret += !(this->m_bss_info.connect_status == obj.m_bss_info.connect_status);
+    ret += (memcmp(&this->m_bss_info.sta_mac, &obj.m_bss_info.sta_mac, sizeof(mac_address_t)) != 0);
 
     if (ret > 0)
         return false;
