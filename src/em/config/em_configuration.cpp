@@ -386,7 +386,7 @@ int em_configuration_t::create_operational_bss_tlv(unsigned char *buff)
     tlv = reinterpret_cast<em_tlv_t *> (tmp);
     tlv->type = em_tlv_type_operational_bss;
     tlv_len = sizeof(em_ap_op_bss_t);
-    printf("first tlv_len in em_configuration_t::create_operational_bss_tlv = %d\n",tlv_len);
+    printf("    ---->>> first tlv_len in em_configuration_t::create_operational_bss_tlv = %d\n",tlv_len);
 
     ap = reinterpret_cast<em_ap_op_bss_t *> (tlv->value);
     assert(ap->radios_num == dm->get_num_radios());
@@ -405,12 +405,19 @@ int em_configuration_t::create_operational_bss_tlv(unsigned char *buff)
         	memcpy(bss->bssid, dm->m_bss[j].m_bss_info.bssid.mac, sizeof(mac_address_t));
         	strncpy(bss->ssid, dm->m_bss[j].m_bss_info.ssid, sizeof(ssid_t));
         	bss->ssid_len = static_cast<unsigned char> (strlen(dm->m_bss[j].m_bss_info.ssid) + 1);
+            printf("  ----->>>BSSID %s, vap_mode:%d, haul type: %d and sta mac: %s\n",
+                util::mac_to_string(bss->bssid).c_str(),
+                dm->m_bss[j].m_bss_info.vap_mode,
+                dm->m_bss[j].m_bss_info.id.haul_type,
+                util::mac_to_string(dm->m_bss[j].m_bss_info.sta_mac).c_str());
         	all_bss_len += static_cast<unsigned int> (sizeof(em_ap_operational_bss_t) + bss->ssid_len);
         	bss = reinterpret_cast<em_ap_operational_bss_t *>(reinterpret_cast<unsigned char *> (bss) + sizeof(em_ap_operational_bss_t) + bss->ssid_len);
 		}
     	radio = reinterpret_cast<em_ap_op_bss_radio_t *>(reinterpret_cast<unsigned char *> (radio) + sizeof(em_ap_op_bss_radio_t) + all_bss_len);
     	tlv_len += static_cast<short unsigned int> (sizeof(em_ap_op_bss_radio_t) + all_bss_len);
 	}
+
+    printf("  ----->>> Before print\n");
 
     tlv->len = htons(tlv_len);
     print_ap_operational_bss_tlv(tlv->value, tlv->len);
@@ -434,7 +441,7 @@ int em_configuration_t::create_operational_bss_tlv_topology(unsigned char *buff)
 	tlv = reinterpret_cast<em_tlv_t *> (tmp);
 	tlv->type = em_tlv_type_operational_bss;
 	tlv_len = sizeof(em_ap_op_bss_t);
-	printf("first tlv_len in em_configuration_t::create_operational_bss_tlv = %d\n",tlv_len);
+	printf("    ------>>> ###### first tlv_len in em_configuration_t::create_operational_bss_tlv = %d\n",tlv_len);
 
 	ap = reinterpret_cast<em_ap_op_bss_t *> (tlv->value);
 	ap->radios_num = 1;  //Hard-Coding since topology response is per radio
@@ -455,6 +462,12 @@ int em_configuration_t::create_operational_bss_tlv_topology(unsigned char *buff)
 				bss->ssid_len = static_cast<unsigned char> (strlen(dm->m_bss[j].m_bss_info.ssid) + 1);
 				all_bss_len += static_cast<unsigned int> (sizeof(em_ap_operational_bss_t) + bss->ssid_len);
 				bss = reinterpret_cast<em_ap_operational_bss_t *>(reinterpret_cast<unsigned char *> (bss) + sizeof(em_ap_operational_bss_t) + bss->ssid_len);
+
+                            printf("  ----->>>BSSID %s, vap_mode:%d, haul type: %d and sta mac: %s\n",
+                util::mac_to_string(bss->bssid).c_str(),
+                dm->m_bss[j].m_bss_info.vap_mode,
+                dm->m_bss[j].m_bss_info.id.haul_type,
+                util::mac_to_string(dm->m_bss[j].m_bss_info.sta_mac).c_str());
 			}
 			radio = reinterpret_cast<em_ap_op_bss_radio_t *>(reinterpret_cast<unsigned char *> (radio) + sizeof(em_ap_op_bss_radio_t) + all_bss_len);
 			tlv_len += static_cast<short unsigned int> (sizeof(em_ap_op_bss_radio_t) + all_bss_len);
@@ -2644,29 +2657,31 @@ int em_configuration_t::create_bsta_radio_cap_tlv(uint8_t *buff)
     int len = sizeof(em_bh_sta_radio_cap_t);
     em_bh_sta_radio_cap_t *bsta_radio_cap = reinterpret_cast<em_bh_sta_radio_cap_t*>(buff);
 
-    for (unsigned int i = 0; i < dm->get_num_bss(); i++) {
-        auto* bss_info = dm->get_bss_info(i);
-        if (!bss_info) continue;
+	for (int i = 0; i < dm->get_num_radios(); i++) {
+        em_printfout("  ------>>>>>> Radio check loopppppp: %d", i);
+		if (memcmp(dm->get_radio_by_ref(i).get_radio_interface_mac(), get_radio_interface_mac(), sizeof(mac_address_t)) == 0) {
+			//em_printfout("  ------>>>>>> Radio found: %s", util::mac_to_string(get_radio_interface_mac()).c_str());
+            for (unsigned int j = 0; j < dm->get_num_bss(); j++) {
+                auto* bss_info = dm->get_bss_info(j);
+                if (!bss_info) continue;
 
-        em_printfout("  BSSID %s, vap_mode:%d, vap name: %s, haul type: %d",
-            util::mac_to_string(bss_info->bssid.mac).c_str(), bss_info->vap_mode, bss_info->bssid.name,  bss_info->id.haul_type);
+                em_printfout("  BSSID %s, vap_mode:%d, vap name: %s, haul type: %d",
+                    util::mac_to_string(bss_info->bssid.mac).c_str(), bss_info->vap_mode, bss_info->bssid.name,  bss_info->id.haul_type);
 
-        if (bss_info->id.haul_type != em_haul_type_backhaul) continue;
-        if (bss_info->vap_mode == em_vap_mode_sta) {
-            em_printfout("  BSTA: %s",
-                util::mac_to_string(bss_info->sta_mac).c_str());
-            memcpy(bsta_radio_cap->bsta_addr, bss_info->sta_mac, sizeof(mac_address_t));
-        } else {
-            memcpy(bsta_radio_cap->bsta_addr, bss_info->bssid.mac, sizeof(mac_address_t));
-        }
-
-        memcpy(bsta_radio_cap->ruid, bss_info->ruid.mac, sizeof(mac_address_t));
-        bsta_radio_cap->bsta_mac_present = 1;
-        em_printfout("  Backhaul STA Radio Capabilities TLV: BSTA: %s of rad: %s",
-            util::mac_to_string(bsta_radio_cap->bsta_addr).c_str(),
-            util::mac_to_string(bss_info->ruid.mac).c_str());
-        break;
-    }
+                if (bss_info->id.haul_type != em_haul_type_backhaul) continue;
+                bsta_radio_cap->bsta_mac_present = 1;
+                memcpy(bsta_radio_cap->ruid, bss_info->ruid.mac, sizeof(mac_address_t));
+                if (bss_info->vap_mode == em_vap_mode_sta) {
+                    memcpy(bsta_radio_cap->bsta_addr, bss_info->sta_mac, sizeof(mac_address_t));
+                } else {
+                    memcpy(bsta_radio_cap->bsta_addr, bss_info->bssid.mac, sizeof(mac_address_t));
+                }
+            }
+		}
+	}
+    em_printfout("Backhaul STA Radio Capabilities TLV: BSTA: %s of rad: %s",
+        util::mac_to_string(bsta_radio_cap->bsta_addr).c_str(),
+        util::mac_to_string(bsta_radio_cap->ruid).c_str());
 
     return len;
 }
@@ -4902,4 +4917,5 @@ em_configuration_t::~em_configuration_t()
 {
 
 }
+
 
