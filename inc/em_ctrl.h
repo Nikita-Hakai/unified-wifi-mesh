@@ -428,6 +428,7 @@ public:
 	 */
 	void handle_mld_reconfig(em_bus_event_t *evt);
 
+	void handle_bsta_cap_req(em_bus_event_t *evt);
     
 	/**!
 	 * @brief 

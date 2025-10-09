@@ -2150,6 +2150,7 @@ public:
 	 */
 	int get_num_bss_for_associated_sta(mac_address_t sta_mac);
     
+	bool is_sta_bsta(mac_address_t sta_mac);
     
 	/**!
 	 * @brief Converts a byte array to a hexadecimal string representation.

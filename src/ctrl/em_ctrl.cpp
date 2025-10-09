@@ -381,6 +381,16 @@ void em_ctrl_t::handle_client_metrics_req()
     }
 }
 
+void em_ctrl_t::handle_bsta_cap_req(em_bus_event_t *evt)
+{
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    int num;
+
+    if ((num = m_data_model.analyze_bsta_cap_req(evt, pcmd)) > 0) {
+        m_orch->submit_commands(pcmd, static_cast<unsigned int> (num));
+    }
+}
+
 void em_ctrl_t::handle_dirty_dm()
 {
 	m_data_model.handle_dirty_dm();
@@ -503,6 +513,10 @@ void em_ctrl_t::handle_bus_event(em_bus_event_t *evt)
         case em_bus_event_type_mld_reconfig:
 			handle_mld_reconfig(evt);
 			break;
+
+        case em_bus_event_type_bsta_cap_req:
+            handle_bsta_cap_req(evt);
+            break;
 	
         default:
             break;
@@ -800,6 +814,19 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
 	        break;
         case em_msg_type_topo_disc:
             em = NULL;
+            break;
+
+        case em_msg_type_bh_sta_cap_query:
+        break;
+        case em_msg_type_bh_sta_cap_rprt:
+            em = static_cast<em_t *> (hash_map_get_first(m_em_map));
+            while(em != NULL) {
+                if ((em->is_al_interface_em() == true)) {
+                    printf("    rcvd bsta report:\n");
+                    break;
+                }
+                em = static_cast<em_t *> (hash_map_get_next(m_em_map, em));
+            }
             break;
         default:
             printf("%s:%d: Frame: 0x%04x not handled in controller\n", __func__, __LINE__, htons(cmdu->type));

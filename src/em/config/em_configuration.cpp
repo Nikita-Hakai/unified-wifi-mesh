@@ -841,6 +841,7 @@ void em_configuration_t::handle_ap_vendor_operational_bss(unsigned char *value, 
 		for (j = 0; j < radio->bss_num; j++) {
 			dm_easy_mesh_t::macbytes_to_string(bss->bssid, bss_mac_str);
 			em_printfout("BSSID=%s haul type=%d vap_mode:%d", bss_mac_str, bss->haultype, bss->vap_mode);
+            //TODO: if vap_mode = 1, ie sta, bssid would bezero, but we can update sta mac
 			dm_bss = dm->get_bss(radio->ruid, bss->bssid);
 			if (dm_bss == NULL) {
 				dm_bss = &dm->m_bss[dm->m_num_bss];
@@ -857,11 +858,16 @@ void em_configuration_t::handle_ap_vendor_operational_bss(unsigned char *value, 
 			dm_bss->m_bss_info.vap_mode = static_cast<em_vap_mode_t> (bss->vap_mode);
 
             if ((dm_bss->m_bss_info.id.haul_type == em_haul_type_backhaul) && (bss->vap_mode == em_vap_mode_ap)) {
-                if (memcmp(bss->bssid, ZERO_MAC_ADDR, sizeof(mac_address_t)) != 0) {
-                    memcpy(dm->m_device.m_device_info.backhaul_mac.mac, bss->bssid, sizeof(mac_address_t));
-                    em_printfout("Backhaul mac updated to: %s", util::mac_to_string(dm->m_device.m_device_info.backhaul_mac.mac).c_str());
+                if ( (memcmp(bss->bssid, ZERO_MAC_ADDR, sizeof(mac_address_t)) != 0) &&
+                     (dm->get_colocated() == false) ) {
+                    //memcpy(dm->m_device.m_device_info.backhaul_mac.mac, bss->bssid, sizeof(mac_address_t));
+//i dont think update to backhaul mac is needed here, it should be done as part of backhaul cap report only for this extender node
+//but trigger event to request backhaul cap report, as this would handle the initial onboarding scenario
+                    em_printfout("  ######################## New config, Backhaul sta cap query triggered ######");
+                    //em_printfout("Backhaul mac updated to: %s", util::mac_to_string(dm->m_device.m_device_info.backhaul_mac.mac).c_str());
 
-                    dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
+                    //dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
+                    get_mgr()->io_process(em_bus_event_type_bsta_cap_req, reinterpret_cast<unsigned char *> (&rd_mac_str), sizeof(mac_addr_str_t));
                 }
             }
 			bss = reinterpret_cast<em_ap_vendor_operational_bss_t *>(reinterpret_cast<unsigned char *> (bss) + sizeof(em_ap_vendor_operational_bss_t));
@@ -1015,7 +1021,7 @@ int em_configuration_t::send_topology_response_msg(unsigned char *dst)
     // Zero or One Backhaul STA Radio capabilities, 17.2.65 Backhaul STA Radio Capabilities TLV
     tlv = reinterpret_cast<em_tlv_t *> (tmp);
     tlv->type = em_tlv_type_bh_sta_radio_cap;
-    tlv_len = static_cast<short unsigned int> (create_bsta_radio_cap_tlv(tlv->value));
+    tlv_len = static_cast<short unsigned int> (create_bsta_radio_cap_tlv(tlv->value));//move this func
     tlv->len = htons(tlv_len);
 
     tmp += sizeof(em_tlv_t) + tlv_len;
@@ -1386,6 +1392,7 @@ int em_configuration_t::handle_bsta_radio_cap(unsigned char *buff, unsigned int 
     dm_easy_mesh_t *dm = get_data_model();
     em_bh_sta_radio_cap_t *bsta_radio_cap = reinterpret_cast<em_bh_sta_radio_cap_t*>(buff);
     mac_addr_str_t mac_str, r_str;
+    bool is_colocated = dm->get_colocated();
 
     em_printfout("Rcvd Backhaul STA Radio Capabilities received, sta mac: %s for radio: %s, mac present?: %d",
         util::mac_to_string(bsta_radio_cap->bsta_addr).c_str(),
@@ -1393,23 +1400,68 @@ int em_configuration_t::handle_bsta_radio_cap(unsigned char *buff, unsigned int 
 
     //find device based on this radio
     em_device_info_t *dev = dm->get_device_info();
-    dm_radio_t *radio = dm->get_radio(bsta_radio_cap->ruid);
-    if (radio == NULL) {
-        em_printfout("Could not find radio: %s in data model",
-            util::mac_to_string(bsta_radio_cap->ruid).c_str());
-        return -1;
-    }
+    // dm_radio_t *radio = dm->get_radio(bsta_radio_cap->ruid);
+    // if (radio == NULL) {
+    //     em_printfout("Could not find radio: %s in data model",
+    //         util::mac_to_string(bsta_radio_cap->ruid).c_str());
+    //     return -1;
+    // }
+
+            memcpy(dm->m_device.m_device_info.backhaul_sta, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+        //also update the bss with the sta mac
+        //dm_bss_t *bss = dm->get_bss(bsta_radio_cap->ruid, bsta_radio_cap->bsta_addr);
+        for (int i = 0; i < dm->get_num_bss(); i++) {
+            if ( (memcmp(dm->m_bss[i].m_bss_info.ruid.mac, bsta_radio_cap->ruid, sizeof(mac_address_t)) == 0) &&
+                 (dm->m_bss[i].m_bss_info.vap_mode == em_vap_mode_sta) ) {
+                memcpy(dm->m_bss[i].m_bss_info.sta_mac, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+                em_printfout("  >>>>>>>> BSS updated with backhaul sta mac: %s for radio: %s",
+                    util::mac_to_string(bsta_radio_cap->bsta_addr).c_str(),
+                    util::mac_to_string(bsta_radio_cap->ruid).c_str());
+                break;
+            }
+        }
 
     if (dev == NULL) {
         em_printfout("Could not find device in data model");
         return -1;
     }
+    em_printfout("  >>>>>> is_colocated val: %d for device id: %s, ctrl al_interface mac: %s \
+        , ctrl interface mac: %s", is_colocated, util::mac_to_string(dev->id.dev_mac).c_str(),
+        util::mac_to_string(dm->get_ctrl_al_interface_mac()).c_str(),
+        util::mac_to_string(dm->get_controller_interface_mac()).c_str());
 
-    em_printfout("Update BSTA Cap for Device id: %s",
+    if( is_colocated == true ) {
+        //check if its the same device
+        if ( (memcmp(dev->id.dev_mac, dm->get_ctrl_al_interface_mac(), sizeof(mac_address_t)) == 0) ) {
+            em_printfout("  >>>> Same device, no Update of BSTA Cap for Colocated Device id: %s",
+                util::mac_to_string(dev->id.dev_mac).c_str());
+            //memcpy(dm->m_device.m_device_info.backhaul_sta, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+            //dm->set_db_cfg_param(db_cfg_type_device_list    _update, "");
+        } else {
+            em_printfout("  >>>>>> Update BSTA Cap for Device id: %s",
+                util::mac_to_string(dev->id.dev_mac).c_str());
+            memcpy(dm->m_device.m_device_info.backhaul_sta, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+            dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
+        }
+    } else {
+            em_printfout("Update BSTA Cap for Device id: %s",
         util::mac_to_string(dev->id.dev_mac).c_str());
 
-    memcpy(dm->m_device.m_device_info.backhaul_sta, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
-    dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
+
+
+
+        // if (bss) {
+        //     memcpy(bss->m_bss_info.bssid.mac, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+        //     memcpy(bss->m_bss_info.id.bssid, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+        //     em_printfout(" BSS updated with backhaul sta mac: %s",
+        //         util::mac_to_string(bss->m_bss_info.bssid.mac).c_str());
+        // } else {
+        //     em_printfout("Could not find BSS for backhaul sta mac: %s",
+        //         util::mac_to_string(bsta_radio_cap->bsta_addr).c_str());
+        // }
+        memcpy(dm->m_device.m_device_info.backhaul_sta, bsta_radio_cap->bsta_addr, sizeof(mac_address_t));
+        dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
+    }
 
     return 0;
 }
@@ -1543,8 +1595,8 @@ int em_configuration_t::handle_topology_notification(unsigned char *buff, unsign
             dm_easy_mesh_t::macbytes_to_string(get_radio_interface_mac(), radio_mac_str);
             snprintf(key, sizeof(em_long_string_t), "%s@%s@%s", sta_mac_str, bssid_str, radio_mac_str);
 
-            //printf("%s:%d: Client Device:%s %s\n", __func__, __LINE__, sta_mac_str,
-            //        (assoc_evt_tlv->assoc_event == 1)?"associated":"disassociated");
+            em_printfout("Client Device:%s %s to BSSID: %s\n", sta_mac_str,
+                    (assoc_evt_tlv->assoc_event == 1)?"associated":"disassociated", bssid_str);
 
             if ((sta = static_cast<dm_sta_t *> (hash_map_get(dm->m_sta_map, key))) == NULL) {
                 eligible_to_req_cap = true;
@@ -1564,6 +1616,50 @@ int em_configuration_t::handle_topology_notification(unsigned char *buff, unsign
                 memcpy(reinterpret_cast<unsigned char *> (&raw.assoc), reinterpret_cast<unsigned char *> (assoc_evt_tlv), sizeof(em_client_assoc_event_t));
 
 				get_mgr()->io_process(em_bus_event_type_sta_assoc, reinterpret_cast<unsigned char *> (&raw), sizeof(em_bus_event_type_client_assoc_params_t));
+
+
+
+                //Test code
+                //TBD: Testing to be done for this scenario where backhual is moved
+                dm_easy_mesh_t *bdm = get_data_model(); //get_first_dm();
+                if (bdm != NULL) {
+                    //check if this sta is also listed under bss, if so check if its vap_mode
+                    //if vap_mode is sta then, this indicates a backhual path update for sta(i.e ext)
+                    //em_bss_info_t *bsta = bdm->get_bsta_bss_info();
+
+                    em_bss_info_t *bss = bdm->get_bss_info_with_mac(assoc_evt_tlv->bssid);
+
+                    //em_printfout("  >>>>>>> Check if this sta is actually a node %s", util::mac_to_string(bsta->id.bssid).c_str());
+                    //bsta->id.bssid wont work as the bssid would be empty
+                    //if (memcmp(bsta->id.bssid, assoc_evt_tlv->cli_mac_address, sizeof(mac_address_t)) == 0)
+                    if (bss != NULL)
+                    {
+                        em_printfout("  >>>>>>> BSS found, check if backhaul\n", sta_mac_str);
+                        if ( (bss->vap_mode == em_vap_mode_ap) && (bss->id.haul_type == em_haul_type_backhaul) ){
+                            // TODO: print this bss's radio's device mac, not sta
+                            em_printfout("  >>>>>>> This is a backhaul update for node %s", sta_mac_str);
+                                                  //its a backhual path update, trigger backhual query
+                        em_printfout("  >>>>>>> Triggering backhaul query for bsta %s\n", sta_mac_str);
+                         em_printfout("  >>>>>>>    this bss struct's sta_mac: %s\n", util::mac_to_string(bss->sta_mac).c_str());
+
+                        get_mgr()->io_process(em_bus_event_type_bsta_cap_req, reinterpret_cast<unsigned char *> (&sta_mac_str), sizeof(mac_addr_str_t));
+                        //break;
+                        }
+
+                    }
+
+                    //check if this sta entry is available in bss list
+                    em_bss_info_t *bsta = bdm->get_bss_info_with_mac(assoc_evt_tlv->cli_mac_address);
+                    if(bsta != NULL)
+                    {
+                        //if so read its vap mode and haul type
+                        em_printfout("  >>>>>>> This STA is also listed under BSS, %s with vap mode: %d", sta_mac_str, bsta->vap_mode);
+                    }
+                    
+                   // bdm = m_data_model_list.get_next_dm(bdm);
+                }
+
+
 
             } else {
                 memset(&sta_info, 0, sizeof(em_sta_info_t));
@@ -4656,7 +4752,7 @@ int em_configuration_t::create_encrypted_settings(unsigned char *buff, em_haul_t
 	unsigned int size = 0, cipher_len, plain_len;
 	unsigned char iv[AES_BLOCK_SIZE];
 	unsigned char plain[MAX_EM_BUFF_SZ];
-	unsigned short auth_type;
+	unsigned short auth_type = 0x0010;
 	em_network_ssid_info_t *net_ssid_info;
 	em_haul_type_t haultype_precedence[em_haul_type_max] = {em_haul_type_fronthaul, em_haul_type_backhaul, em_haul_type_iot, em_haul_type_configurator, em_haul_type_hotspot};
 	memset(plain, 0, MAX_EM_BUFF_SZ);
@@ -4687,9 +4783,9 @@ int em_configuration_t::create_encrypted_settings(unsigned char *buff, em_haul_t
 
 	if (get_band() == 2) {
 		auth_type = 0x0200; // WPA3-Personal
-	} else {
-		auth_type = 0x0400; // WPA3-Personal-Transition
-	}
+	} //else {
+	// 	auth_type = 0x0400; // WPA3-Personal-Transition
+	// }
 
 	printf("%s:%d No of haultype=%d radio no of bss=%d \n", __func__, __LINE__,no_of_haultype, radio->m_radio_info.number_of_bss);
 

@@ -57,6 +57,7 @@
 #include "em_cmd_sta_disassoc.h"
 #include "em_cmd_get_mld_config.h"
 #include "em_cmd_mld_reconfig.h"
+#include "em_cmd_bsta_cap.h"
 
 extern em_network_topo_t *g_network_topology;
 
@@ -119,7 +120,7 @@ int dm_easy_mesh_ctrl_t::analyze_sta_assoc_event(em_bus_event_t *evt, em_cmd_t *
     int num = 0;
     size_t len;
     unsigned int i;
-    dm_easy_mesh_t  dm, *pdm;
+    dm_easy_mesh_t  dm, *pdm, *bdm = NULL;
     em_cmd_t *tmp;
     dm_bss_t *pbss;
     bool radio_matched = false, found;
@@ -200,6 +201,24 @@ int dm_easy_mesh_ctrl_t::analyze_sta_assoc_event(em_bus_event_t *evt, em_cmd_t *
         tmp = pcmd[num];
         num++;
     }
+
+    // // TBD: Testing to be done for this scenario where backhual is moved
+    // bdm = m_data_model_list.get_first_dm();
+    // while (tdm != NULL) {
+	// 	//check if this sta is also listed under bss, if so check if its vap_mode
+    //     //if vap_mode is sta then, this indicates a backhual path update for sta(i.e ext)
+    //     em_bss_info_t *bsta = bdm->get_bsta_bss_info();
+    //     if (memcmp(bsta->id.bssid, params->assoc.cli_mac_address, sizeof(mac_address_t)) == 0)
+    //     {
+    //         //its a backhual path update, trigger backhual query
+    //         em_printfout("  >>>>>>> Triggering backhaul query for bsta %s\n", sta_mac_str);
+
+    //         get_mgr()->io_process(em_bus_event_type_bsta_cap_req, reinterpret_cast<unsigned char *> (&sta_mac_str), sizeof(mac_addr_str_t));
+    //         break;
+    //     }
+        
+	// 	bdm = m_data_model_list.get_next_dm(bdm);
+    // }
 
     return num;
 }
@@ -1017,6 +1036,32 @@ int dm_easy_mesh_ctrl_t::analyze_mld_reconfig(em_cmd_t *pcmd[])
     return num;
 }*/
 
+//decide which radio/em to request for right here
+int dm_easy_mesh_ctrl_t::analyze_bsta_cap_req(em_bus_event_t *evt, em_cmd_t *pcmd[])
+{
+    int num = 0;
+    em_cmd_t *tmp;
+
+     dm_easy_mesh_t dm = *this;
+
+    printf("    >>>>>>raw_buff in anaylze : %s\n", evt->u.raw_buff);
+
+    evt->params.u.args.num_args = 1;
+    strncpy(evt->params.u.args.args[0], (const char *)evt->u.raw_buff, sizeof(mac_addr_str_t));
+
+    pcmd[num] = new em_cmd_bsta_cap_t(evt->params, dm);
+    tmp = pcmd[num];
+    num++;
+
+    //crashing
+    // while ((pcmd[num] = tmp->clone_for_next()) != NULL) {
+    //     tmp = pcmd[num];
+    //     num++;
+    // }
+
+    return num;
+}
+
 int dm_easy_mesh_ctrl_t::set_op_class_list(cJSON *op_class_list_obj, mac_address_t *radio_mac)
 {
     dm_op_class_list_t::set_config(m_db_client, op_class_list_obj, radio_mac);
@@ -1552,8 +1597,16 @@ int dm_easy_mesh_ctrl_t::copy_config(dm_easy_mesh_t *dm, em_long_string_t net_id
     return 0;
 }
 
+// void dm_easy_mesh_ctrl_t::check_backhaul_links()
+// {
+
+// }
+
 int dm_easy_mesh_ctrl_t::set_config(dm_easy_mesh_t *dm)
 {
+    //also detect any changes in topology(backhual)
+    //monitor backhual changes
+    //check_backhaul_links();
     return update_tables(dm);
 }
 

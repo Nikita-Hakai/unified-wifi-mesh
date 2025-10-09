@@ -1685,6 +1685,22 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
         case em_msg_type_topo_disc:
             em = NULL;
             break;
+
+        case em_msg_type_bh_sta_cap_query:
+                    printf("\n  Rcvd bsta cap Query\n");
+
+            em = (em_t *)hash_map_get_first(m_em_map);
+            while (em != NULL) {
+                if ((em->is_al_interface_em() == true)) {
+                    break;
+                }
+                em = (em_t *)hash_map_get_next(m_em_map, em);
+            }
+            break;
+        case em_msg_type_bh_sta_cap_rprt:
+printf("\n  sending bsta cap report \n");
+            break;
+
         default:
             printf("%s:%d: Frame: %d not handled in agent\n", __func__, __LINE__, htons(cmdu->type));
             em = NULL;

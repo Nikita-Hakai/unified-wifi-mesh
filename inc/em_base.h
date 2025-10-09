@@ -1956,6 +1956,7 @@ typedef enum {
     em_state_ctrl_bsta_mld_config_pending,
     em_state_ctrl_ap_mld_req_ack_rcvd,
     em_state_ctrl_avail_spectrum_inquiry_pending,
+    em_state_ctrl_bsta_cap_pending,
 
     em_state_max,
 } em_state_t;
@@ -2006,6 +2007,7 @@ typedef enum {
     em_cmd_type_beacon_report,
     em_cmd_type_ap_metrics_report,
     em_cmd_type_get_reset,
+    em_cmd_type_bsta_cap,
 
     em_cmd_type_max,
 } em_cmd_type_t;
@@ -2685,6 +2687,7 @@ typedef enum {
     em_bus_event_type_bss_info,
     em_bus_event_type_get_reset,
     em_bus_event_type_recv_csa_beacon_frame,
+    em_bus_event_type_bsta_cap_req,
 
     em_bus_event_type_max
 } em_bus_event_type_t;
@@ -2770,7 +2773,8 @@ typedef enum {
     dm_orch_type_sta_disassoc,
     dm_orch_type_policy_cfg,
     dm_orch_type_mld_reconfig,
-    dm_orch_type_beacon_report
+    dm_orch_type_beacon_report,
+    dm_orch_type_bsta_cap_query
 } dm_orch_type_t;
 
 typedef struct {

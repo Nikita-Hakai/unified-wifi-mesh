@@ -177,6 +177,12 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_fini(em_cmd_t *pcmd, em_t *em)
         case em_cmd_type_start_dpp:
             return true;
 
+        case em_cmd_type_bsta_cap:
+            if (em->get_state() == em_state_ctrl_configured) {
+                return true;
+            }
+            break;
+
         default:
             break;
     }
@@ -232,6 +238,7 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_exec(em_cmd_t *pcmd, em_t *em)
         case em_cmd_type_sta_link_metrics:
         case em_cmd_type_scan_channel:
         case em_cmd_type_set_policy:
+        case em_cmd_type_bsta_cap:
             if (em->get_state() == em_state_ctrl_configured) {
                 return true;
             }
@@ -378,6 +385,9 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 				break;
 			}
 			break;
+        
+        case dm_orch_type_bsta_cap_query:
+			break;
 
         default:
             break;
@@ -388,6 +398,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 
 unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
 {
+    em_printfout("  ############################## BC ##############################");
     em_t *em;
     dm_easy_mesh_t *dm;
     mac_address_t	bss_mac;
@@ -535,6 +546,33 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
                     // TODO: Add additional checks for provisioning state or more if needed 
                     queue_push(pcmd->m_em_candidates, em);
                     count++;
+                }
+                break;
+
+            case em_cmd_type_bsta_cap:
+            em_printfout("  ############################## BSTA CAP ##############################");
+                                   
+                dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], bss_mac);
+                em_printfout("  BSS from args is %s\n", pcmd->m_param.u.args.args[0]);
+                if ( (memcmp(em->get_radio_interface_mac(), bss_mac, sizeof(mac_address_t)) == 0))
+                {
+                    //search this sta mac in bss as its a sta and filter the em
+                    dm = em->get_data_model();
+                    for (i = 0; i < dm->m_num_bss; i++) {
+                        em_printfout("  dm BSS is %s\n", util::mac_to_string(dm->m_bss[i].m_bss_info.bssid.mac).c_str());
+                        if ((memcmp(dm->m_bss[i].m_bss_info.bssid.mac, bss_mac, sizeof(mac_address_t)) == 0))
+                        //if ((memcmp(dm->m_bss[i].m_bss_info.bssid.mac, bss_mac, sizeof(mac_address_t)) != 0))
+                        {
+                            queue_push(pcmd->m_em_candidates, em);
+                            count++;
+                            //em_printfout("%s:%d:Found em this STA, candidate count: %d\n", __func__, __LINE__, count);
+                            em_printfout("  BSTA CAP : push to queue for em radio: %s\n", util::mac_to_string(em->get_radio_interface_mac()).c_str());
+                            break;
+                        }
+                    }
+                    // em_printfout("  BSTA CAP : %p push to queue for em radio: %s\n", __func__, __LINE__, util::mac_to_string(em->get_radio_interface_mac()).c_str());
+                    // queue_push(pcmd->m_em_candidates, em);
+                    // count++;
                 }
                 break;
 

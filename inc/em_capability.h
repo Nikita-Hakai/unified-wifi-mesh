@@ -24,6 +24,8 @@
 #include "em.h"
 
 class em_cmd_t;
+class em_mgr_t;
+//class em_configuration_t;
 class em_capability_t {
 
     
@@ -452,6 +454,9 @@ class em_capability_t {
 	 * @note Ensure that the MAC address and BSSID are valid before calling this function.
 	 */
 	int send_client_cap_report_msg(mac_address_t sta, bssid_t bss);
+
+	void send_bsta_cap_query_msg();
+	int send_bsta_cap_report_msg();
     
 	/**!
 	 * @brief Creates an AP capability report message.
@@ -563,6 +568,10 @@ class em_capability_t {
 	 */
 	short create_client_info_tlv(unsigned char *buff, mac_address_t sta, bssid_t bssid);
 
+	void create_bsta_cap_query_msg();
+	int create_bsta_radio_cap_tlv(uint8_t *buff);
+
+	virtual em_mgr_t *get_mgr() = 0;
     
 	/**!
 	 * @brief Handles the client capability query.
@@ -591,7 +600,9 @@ class em_capability_t {
 	 * @note Ensure that the data buffer is valid and the length is correctly specified.
 	 */
 	int handle_client_cap_report(unsigned char *data, unsigned int len);
-
+void handle_bsta_cap_query(unsigned char *buff, unsigned int len);
+void handle_bsta_cap_report(unsigned char *buff, unsigned int len);
+int handle_bsta_radio_cap(unsigned char *buff, unsigned int len);
 public:
     
 	/**!
@@ -615,7 +626,15 @@ public:
 	 */
 	void    process_agent_state();
 
-    
+	/**!
+	* @brief Processes the control state.
+	*
+	* This function is responsible for handling the current state of the control mechanism.
+	*
+	* @note Ensure that the control state is initialized before calling this function.
+	*/
+	void    process_ctrl_state();
+
 	/**!
 	 * @brief Retrieves the capability query transmission count.
 	 *

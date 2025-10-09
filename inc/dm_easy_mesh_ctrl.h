@@ -592,7 +592,8 @@ public:
 	 */
 	int analyze_mld_reconfig(em_cmd_t *pcmd[]);
 
-    
+    int analyze_bsta_cap_req(em_bus_event_t *evt, em_cmd_t *pcmd[]);
+
 	/**!
 	 * @brief Resets the configuration to its default state.
 	 *
