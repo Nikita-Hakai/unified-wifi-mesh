@@ -433,8 +433,8 @@ int em_capability_t::create_bsta_radio_cap_tlv(uint8_t *buff)
     int len = sizeof(em_bh_sta_radio_cap_t);
     em_bh_sta_radio_cap_t *bsta_radio_cap = reinterpret_cast<em_bh_sta_radio_cap_t*>(buff);
 
-    for (int i = 0; i < dm->get_num_radios(); i++) {
-        if (memcmp(dm->get_radio_by_ref(i).get_radio_interface_mac(), get_radio_interface_mac(), sizeof(mac_address_t)) == 0) {
+    //for (int i = 0; i < dm->get_num_radios(); i++) {
+        //if (memcmp(dm->get_radio_by_ref(i).get_radio_interface_mac(), get_radio_interface_mac(), sizeof(mac_address_t)) == 0) {
             for (unsigned int j = 0; j < dm->get_num_bss(); j++) {
                 auto* bss_info = dm->get_bss_info(j);
                 if (!bss_info) continue;
@@ -451,8 +451,8 @@ int em_capability_t::create_bsta_radio_cap_tlv(uint8_t *buff)
                     memcpy(bsta_radio_cap->bsta_addr, bss_info->bssid.mac, sizeof(mac_address_t));
                 }
             }
-        }
-    }
+        //}
+    //}
     em_printfout("Backhaul STA Radio Capabilities TLV: BSTA: %s of rad: %s",
         util::mac_to_string(bsta_radio_cap->bsta_addr).c_str(),
         util::mac_to_string(bsta_radio_cap->ruid).c_str());
@@ -699,10 +699,6 @@ int em_capability_t::send_bsta_cap_report_msg()
         len += (sizeof(em_tlv_t) + static_cast<size_t> (sz));
     }
 
-
-
-
-
     // End of message
     tlv = reinterpret_cast<em_tlv_t *> (tmp);
     tlv->type = em_tlv_type_eom;
@@ -903,7 +899,7 @@ void em_capability_t::handle_bsta_cap_report(unsigned char *buff, unsigned int l
     tlv =  reinterpret_cast<em_tlv_t *> (buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
     tmp_len = len - static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
 
-    em_printfout("Backhaul Sta Capability report message rcvd");
+    em_printfout("  >>>>>> Backhaul Sta Capability report message rcvd");
 
     while ((tlv->type != em_tlv_type_eom) && (tmp_len > 0)) {
         if (tlv->type != em_tlv_type_bh_sta_radio_cap) {

@@ -398,10 +398,10 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 
 unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
 {
-    em_printfout("  ############################## BC ##############################");
+    
     em_t *em;
     dm_easy_mesh_t *dm;
-    mac_address_t	bss_mac;
+    mac_address_t	bss_mac, rad_mac;
     unsigned int count = 0, i;
     mac_addr_str_t mac_str;
     em_disassoc_params_t *disassoc_param;
@@ -420,6 +420,7 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
 	pthread_mutex_lock(&m_mgr->m_mutex);
     em = static_cast<em_t *>(hash_map_get_first(m_mgr->m_em_map));
     while (em != NULL) {
+        em_printfout("  ############################## BC ##############################");
         switch (pcmd->m_type) {
             case em_cmd_type_set_ssid:
 		if (em->is_al_interface_em() == false) {
@@ -552,16 +553,25 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
             case em_cmd_type_bsta_cap:
             em_printfout("  ############################## BSTA CAP ##############################");
                                    
-                dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], bss_mac);
-                em_printfout("  BSS from args is %s\n", pcmd->m_param.u.args.args[0]);
-                if ( (memcmp(em->get_radio_interface_mac(), bss_mac, sizeof(mac_address_t)) == 0))
-                {
-                    //search this sta mac in bss as its a sta and filter the em
-                    dm = em->get_data_model();
-                    for (i = 0; i < dm->m_num_bss; i++) {
-                        em_printfout("  dm BSS is %s\n", util::mac_to_string(dm->m_bss[i].m_bss_info.bssid.mac).c_str());
-                        if ((memcmp(dm->m_bss[i].m_bss_info.bssid.mac, bss_mac, sizeof(mac_address_t)) == 0))
+                //dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], bss_mac);
+                dm_easy_mesh_t::string_to_macbytes(pcmd->m_param.u.args.args[0], rad_mac);
+                //em_printfout("  Dev al mac from args is %s\n", pcmd->m_param.u.args.args[0]);
+                em_printfout("  Radio mac from args is %s\n", pcmd->m_param.u.args.args[0]);
+                em_printfout("  em->get_al_interface_mac() is %s\n", util::mac_to_string(em->get_al_interface_mac()).c_str());
+                
+                //if ( (memcmp(em->get_radio_interface_mac(), bss_mac, sizeof(mac_address_t)) == 0))
+                
+                //search this radio em of for this agent al device to filter the em
+                dm = em->get_data_model();
+
+                em_printfout("  em->get_agent_al_interface_mac() is %s\n", util::mac_to_string(dm->get_agent_al_interface_mac()).c_str());
+                //if((dm->get_colocated() == true)){
+                    //for (i = 0; i < dm->m_num_bss; i++) {
+                        
+                        //if ((memcmp(dm->m_bss[i].m_bss_info.bssid.mac, bss_mac, sizeof(mac_address_t)) == 0))
                         //if ((memcmp(dm->m_bss[i].m_bss_info.bssid.mac, bss_mac, sizeof(mac_address_t)) != 0))
+                        //if ((memcmp(em->get_agent_al_interface_mac(), bss_mac, sizeof(mac_address_t)) == 0))
+                        if ((memcmp(em->get_radio_interface_mac(), rad_mac, sizeof(mac_address_t)) == 0))
                         {
                             queue_push(pcmd->m_em_candidates, em);
                             count++;
@@ -569,11 +579,11 @@ unsigned int em_orch_ctrl_t::build_candidates(em_cmd_t *pcmd)
                             em_printfout("  BSTA CAP : push to queue for em radio: %s\n", util::mac_to_string(em->get_radio_interface_mac()).c_str());
                             break;
                         }
-                    }
+                    //}
                     // em_printfout("  BSTA CAP : %p push to queue for em radio: %s\n", __func__, __LINE__, util::mac_to_string(em->get_radio_interface_mac()).c_str());
                     // queue_push(pcmd->m_em_candidates, em);
                     // count++;
-                }
+                //}
                 break;
 
             default:

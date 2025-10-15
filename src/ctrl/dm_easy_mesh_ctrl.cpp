@@ -1044,10 +1044,18 @@ int dm_easy_mesh_ctrl_t::analyze_bsta_cap_req(em_bus_event_t *evt, em_cmd_t *pcm
 
      dm_easy_mesh_t dm = *this;
 
-    printf("    >>>>>>raw_buff in anaylze : %s\n", evt->u.raw_buff);
+    em_printfout("    >>>>>>raw_buff in anaylze : %s\n", evt->u.raw_buff);
 
     evt->params.u.args.num_args = 1;
     strncpy(evt->params.u.args.args[0], (const char *)evt->u.raw_buff, sizeof(mac_addr_str_t));
+
+    //find dev id for this radio
+    // mac_address_t dev_mac;
+    // em_device_info_t *get_device_info = dm->get_device_info();
+
+    // dm_radio_t *dm_radio = dm.get_radio(const mac_address_t mac);
+
+//em_printfout("    >>>>>>  : %s\n", evt->u.raw_buff);
 
     pcmd[num] = new em_cmd_bsta_cap_t(evt->params, dm);
     tmp = pcmd[num];
@@ -1517,7 +1525,7 @@ int dm_easy_mesh_ctrl_t::get_network_config(cJSON *parent, char *key)
 {
 	// get the data from topology
 	m_topology->encode(parent);
-	//em_printfout("Network Topology Json:\n%s",cJSON_Print(parent));
+	em_printfout("Network Topology Json:\n%s",cJSON_Print(parent));
 	return 0;
 }
 

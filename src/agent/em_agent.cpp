@@ -1698,7 +1698,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
             }
             break;
         case em_msg_type_bh_sta_cap_rprt:
-printf("\n  sending bsta cap report \n");
+            printf("\n  sending bsta cap report \n");
             break;
 
         default:

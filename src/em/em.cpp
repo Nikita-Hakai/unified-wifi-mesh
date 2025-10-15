@@ -342,6 +342,7 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
             break;
 
         case em_msg_type_bh_sta_cap_query:
+        case em_msg_type_bh_sta_cap_rprt:
             em_capability_t::process_msg(data, len);
             break;
 

@@ -2992,6 +2992,7 @@ dm_easy_mesh_t::dm_easy_mesh_t(const dm_network_t& net)
     memcpy(&m_device.m_device_info.id, &net.m_net_info.ctrl_id, sizeof(em_interface_t));
     memcpy(&m_device.m_device_info.backhaul_alid, &net.m_net_info.ctrl_id, sizeof(em_interface_t));
     memcpy(&m_device.m_device_info.backhaul_mac, &net.m_net_info.ctrl_id, sizeof(em_interface_t));
+    em_printfout("  backhaul_mac/ctrl_id %s", util::mac_to_string(net.m_net_info.ctrl_id.mac).c_str());
 
     name_from_mac_address(&m_device.m_device_info.intf.mac, m_device.m_device_info.intf.name);  
     name_from_mac_address(&m_device.m_device_info.backhaul_alid.mac, m_device.m_device_info.backhaul_alid.name);    

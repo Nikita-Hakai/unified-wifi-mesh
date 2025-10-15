@@ -196,6 +196,7 @@ int dm_device_list_t::update_db(db_client_t& db_client, dm_orch_type_t op, void 
     dm_easy_mesh_t::macbytes_to_string(info->backhaul_sta, bsta_str);
 
     //printf("dm_device_list_t:%s:%d: Operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(op));
+    printf("    ######### update db dm_device_list_t:%s:%d: Operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(op));
     switch (op) {
         case dm_orch_type_db_insert:
             ret = insert_row(db_client, key, mac_str,

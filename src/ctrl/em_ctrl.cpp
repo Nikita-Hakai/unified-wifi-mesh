@@ -822,7 +822,7 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
             em = static_cast<em_t *> (hash_map_get_first(m_em_map));
             while(em != NULL) {
                 if ((em->is_al_interface_em() == true)) {
-                    printf("    rcvd bsta report:\n");
+                    printf("    rcvd bsta report:, selected em: %s\n", util::mac_to_string(em->get_radio_interface_mac()).c_str());
                     break;
                 }
                 em = static_cast<em_t *> (hash_map_get_next(m_em_map, em));
