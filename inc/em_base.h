@@ -2764,6 +2764,7 @@ typedef enum {
     dm_orch_type_net_ssid_update,
     dm_orch_type_topo_sync,
     dm_orch_type_topo_update,
+    dm_orch_type_topo_publish,
     dm_orch_type_channel_pref,
     dm_orch_type_channel_sel,
     dm_orch_type_channel_cnf,

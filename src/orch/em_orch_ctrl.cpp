@@ -389,6 +389,9 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
         case dm_orch_type_bsta_cap_query:
 			break;
 
+        case dm_orch_type_topo_publish:
+            break;
+
         default:
             break;
     }

@@ -136,17 +136,21 @@ int em_cmd_ctrl_t::send_result(em_cmd_out_status_t status)
 
     tmp = reinterpret_cast<unsigned char *> (m_cmd.status_to_string(status, str));
 
-    if ((ret = SSL_write(m_ssl, tmp, static_cast<int> (strlen(str) + 1))) <= 0) {
-        printf("%s:%d: write error on socket, err:%d\n", __func__, __LINE__, errno);
+    if (!m_ssl) {
+        printf("%s:%d: m_ssl is NULL, cannot send result\n", __func__, __LINE__);
+        return -1;
     }
-
-	//printf("%s:%d: Send success bytes sent:%d\n", __func__, __LINE__, ret);
-	sd = SSL_get_fd(m_ssl);
-	SSL_shutdown(m_ssl);
-	SSL_free(m_ssl);
-	close(sd);
-
-	free(str);
+     if ((ret = SSL_write(m_ssl, tmp, strlen(str) + 1)) <= 0) {
+         printf("%s:%d: write error on socket, err:%d\n", __func__, __LINE__, errno);
+     }
+ 
+       //printf("%s:%d: Send success bytes sent:%d\n", __func__, __LINE__, ret);
+       printf("%s:%d: Send success bytes sent:%d\n", __func__, __LINE__, ret);
+        sd = SSL_get_fd(m_ssl);
+        SSL_shutdown(m_ssl);
+        SSL_free(m_ssl);
+    m_ssl = nullptr;
+        close(sd);
 
     return 0;
 }
