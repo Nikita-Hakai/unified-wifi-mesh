@@ -632,7 +632,7 @@ public:
 	* @param[i] output pointer to send dta
 	* @param[i] user_data get the bus handle
 	*/
-	//static bus_error_t cmd_setssid (const char *event_name, bus_data_prop_t const *input_data, bus_data_prop_t *output_data, void *user_data);
+	static bus_error_t cmd_setssid (const char *event_name, bus_data_prop_t const *input_data, bus_data_prop_t *output_data, void *user_data);
 
 
 #ifdef AL_SAP

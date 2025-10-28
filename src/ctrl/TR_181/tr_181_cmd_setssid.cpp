@@ -23,7 +23,7 @@ extern char *global_netid;
 
 #define MAX_PARAM_LEN 128
 
-#if 0
+#if 1
 //TODO: Rbus abstraction needed for this async method call, it will be enabled once its ready
 bus_error_t em_ctrl_t::cmd_setssid(const char *event_name, bus_data_prop_t const *input_data, bus_data_prop_t *output_data, void *user_data)
 {
