@@ -42,10 +42,10 @@ onewifi_em_network_optimser_SOURCES =  \
      $(top_srcdir)/src/network_optimiser/test_tr181.cpp \
      $(top_srcdir)/OneWifi/source/utils/collection.c \
      $(top_srcdir)/OneWifi/lib/common/util.c \
-     $(top_srcdir)/OneWifi/source/platform/rdkb/bus.c \ 
+     $(top_srcdir)/OneWifi/source/platform/rdkb/bus.c \
      $(top_srcdir)/OneWifi/source/platform/common/bus_common.c
  
  
-onewifi_em_network_optimser_LDFLAGS = -lm -lpthread -ldl -luuid -lcjson -lssl -lcrypto -lwifi_bus -lrbus #-lwifi_webconfig
+onewifi_em_network_optimser_LDFLAGS = -lm -lpthread -ldl -luuid -lcjson -lssl -lcrypto -lrbus -fsanitize=address -fsanitize=undefined -lwifi_webconfig
 onewifi_em_network_optimser_LDADD = $(top_builddir)/src/al-sap/libalsap.la
 

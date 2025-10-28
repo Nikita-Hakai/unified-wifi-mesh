@@ -871,9 +871,9 @@ void em_ctrl_t::start_complete()
 			{ bus_data_type_string, false, 0, 0, 0, NULL } },
 		{ DEVICE_WIFI_DATAELEMENTS_NETWORK_CONTROLLERID, bus_element_type_method,
 			{ get_device_wifi_dataelements_network_controllerid, NULL , NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
-		// 	{ bus_data_type_string, false, 0, 0, 0, NULL } },
-		// { DEVICE_WIFI_DATAELEMENTS_NETWORK_SETSSID_CMD, bus_element_type_method,
-		// 	{ NULL, NULL, NULL, NULL, NULL, cmd_setssid}, slow_speed, ZERO_TABLE,
+			{ bus_data_type_string, false, 0, 0, 0, NULL } },
+		{ DEVICE_WIFI_DATAELEMENTS_NETWORK_SETSSID_CMD, bus_element_type_method,
+			{ NULL, NULL, NULL, NULL, NULL, cmd_setssid}, slow_speed, ZERO_TABLE,
 			{ bus_data_type_string, true, 0, 0, 0, NULL } }
 	};
 
@@ -882,7 +882,10 @@ void em_ctrl_t::start_complete()
 		return;
 	}
 
-    bus_init(&m_bus_hdl);
+    printf("    ===============bus: bus_regDataElements start from controller ============\n", __func__, __LINE__);
+    memset(&m_bus_hdl, 0, sizeof(bus_handle_t));
+    int rc = bus_init(&m_bus_hdl);
+    printf("%s:%d bus_init rc=%d\n", __func__, __LINE__, rc);
         
     if((desc = get_bus_descriptor()) == NULL) {
         printf("%s:%d descriptor is null\n", __func__, __LINE__);
@@ -912,6 +915,8 @@ void em_ctrl_t::start_complete()
 	if (bus_error_val != bus_error_success) {
 		printf("%s:%d bus: bus_regDataElements failed\n", __func__, __LINE__);
 	}
+
+    printf("    ===============bus: bus_regDataElements complete ============\n", __func__, __LINE__);
 
 	// build initial network topology
 	init_network_topology();
