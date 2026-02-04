@@ -326,7 +326,7 @@ public:
 	 */
 	int analyze_ap_metrics_report(em_bus_event_t *evt, em_cmd_t *pcmd[]);
 	int analyze_link_stats_report(em_bus_event_t *evt, em_cmd_t *pcmd[]);
-
+int analyze_send_logs_evt(em_bus_event_t *evt, em_cmd_t *pcmd[]);
 	/**!
 	 * @brief Refreshes the OneWiFi subdocument.
 	 *

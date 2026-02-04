@@ -1504,10 +1504,24 @@ typedef struct {
 } __attribute__((__packed__)) em_1905_mac_addr_t;
 
 typedef struct {
+    unsigned char attr_id;
+    unsigned char  vendor_data[0];
+} __attribute__((__packed__)) em_vendor_data_t;
+
+typedef struct {
     unsigned char  vendor_oui[3];
-    unsigned char m_num;
-    unsigned char  *m;
+    unsigned char num;
+    unsigned char  data[0];
 } __attribute__((__packed__)) em_vendor_specific_t;
+
+typedef struct {
+    uint32_t transfer_id;
+    uint32_t offset;
+    uint16_t total_chunks;// Total number of chunks
+    uint16_t seq_num;// Current chunk number (0-based)
+    uint32_t total_size;
+    unsigned char payload[0];
+} __attribute__((__packed__)) vendor_chunk_header_t;
 
 typedef struct {
     unsigned char  destination;    
@@ -1834,11 +1848,17 @@ typedef struct {
     em_string_t collection_start_time;
     unsigned int reporting_interval;
     float link_quality_threshold;
-} __attribute__((__packed__)) em_link_report_alarm_policy_cfg_t;
+} em_link_stats_alarm_cfg_t;
 
 typedef struct {
+    mac_addr_t sta_mac;
+    unsigned int consec_alarm_thres_cnt;
+    em_small_string_t collect_duration;
+} em_client_filters_cfg_t;
+typedef struct {
     em_string_t managed_client_marker;
-    em_link_report_alarm_policy_cfg_t link_stats_alarm_policy_cfg;
+    em_link_stats_alarm_cfg_t link_stats_alarm_policy_cfg;
+    em_client_filters_cfg_t client_filters_policy_cfg;
 }__attribute__((__packed__)) em_vendor_policy_t;
 
 typedef struct {
@@ -1991,6 +2011,9 @@ typedef enum {
     vendor_ext_attr_id_haul_type = 0x01,
     vendor_ext_attr_id_policy_sta_marker,
     vendor_ext_attr_id_policy_alarm,
+    vendor_ext_attr_id_policy_cfg_client_filter,
+    vendor_ext_attr_id_link_report,
+    vendor_ext_attr_id_ap_log,
 
     vendor_ext_attr_id_max
 } vendor_ext_attr_id_t;
@@ -2021,6 +2044,7 @@ typedef enum {
     em_state_agent_beacon_report_pending,
     em_state_agent_ap_metrics_pending,
     em_state_agent_link_stats_report_pending,
+    em_state_agent_logger_report_pending,
 
     em_state_ctrl_unconfigured = 0x100,
     em_state_ctrl_wsc_m1_pending,
@@ -2104,7 +2128,8 @@ typedef enum {
     em_cmd_type_ap_metrics_report,
     em_cmd_type_get_reset,
     em_cmd_type_bsta_cap,
-    em_cmd_type_get_link_stats_alarm_report,
+    //em_cmd_type_get_link_stats_alarm_report
+    em_cmd_type_send_report,
 
     em_cmd_type_max,
 } em_cmd_type_t;
@@ -2779,6 +2804,8 @@ typedef enum {
     em_bus_event_type_recv_csa_beacon_frame,
     em_bus_event_type_bsta_cap_req,
     em_bus_event_type_link_stats_alarm_report,
+    em_bus_event_type_collect_logs,
+    em_bus_event_type_send_logs_pending,
 
     em_bus_event_type_max
 } em_bus_event_type_t;
@@ -2868,7 +2895,10 @@ typedef enum {
     dm_orch_type_mld_reconfig,
     dm_orch_type_beacon_report,
     dm_orch_type_bsta_cap_query,
-    dm_orch_type_link_stats_report
+    dm_orch_type_link_stats_report,
+    dm_orch_type_logger_report,
+
+    dm_orch_type_max
 } dm_orch_type_t;
 
 typedef struct {
@@ -3253,6 +3283,7 @@ typedef enum {
 	em_policy_id_type_backhaul_bss_config,
 	em_policy_id_type_qos_mgt,
     em_policy_id_type_alarm_threshold,
+    em_policy_id_type_client_filters,
 
 	em_policy_id_type_unknown,
 } em_policy_id_type_t;
@@ -3288,12 +3319,6 @@ typedef struct {
 } em_traffic_separation_policy_t;
 
 typedef struct {
-    em_long_string_t collection_start_time;
-    unsigned int reporting_interval;
-    float link_quality_threshold;
-} em_link_stats_alarm_cfg_t;
-
-typedef struct {
 	em_policy_id_t	id;
 	unsigned int num_sta;
 	mac_address_t	sta_mac[EM_MAX_STA_PER_STEER_POLICY];
@@ -3312,6 +3337,7 @@ typedef struct {
 	em_8021q_settings_policy_t  def_8021q_settings;
 	em_traffic_separation_policy_t traffic_separ;
     em_link_stats_alarm_cfg_t link_stats_alarm_cfg;
+    em_client_filters_cfg_t client_filters;
 } em_policy_t;
 
 typedef em_network_node_t  *(* em_editor_callback_t)(em_network_node_t *, void *);
@@ -3370,6 +3396,14 @@ static const SecurityTypeMap securityTypeMap[] = {
     { "WPA3 Personal",   EM_AUTH_WPA3_PERSONAL },
     { "WPA3 Transition", EM_AUTH_WPA3_TRANSITION }
 };
+
+typedef struct {
+    unsigned int id;
+    unsigned int remaining_seconds;
+    em_bus_event_type_t event_type;  // which event this timer is for
+    void* data;  // opaque data associated with the timer
+    size_t data_len;
+} em_timer_t;
 
 #ifndef SSL_KEY
 #if OPENSSL_VERSION_NUMBER < 0x30000000L

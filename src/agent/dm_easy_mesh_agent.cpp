@@ -962,7 +962,7 @@ int dm_easy_mesh_agent_t::analyze_link_stats_report(em_bus_event_t *evt, em_cmd_
 
     //dm_sta_t *sta = NULL;
 
-    //pcmd[num] = new em_cmd_link_stats_report_t(evt->params,dm);
+    //pcmd[num] = new em_cmd_type_send_report_t(evt->params,dm);
     
 
     // sta = static_cast<dm_sta_t *> (hash_map_get_first(dm.m_sta_map));
@@ -1019,7 +1019,7 @@ int dm_easy_mesh_agent_t::analyze_link_stats_report(em_bus_event_t *evt, em_cmd_
         strncpy(evt_param->u.args.args[1], macstr, strlen(macstr) + 1);
     }
 
-    pcmd[num] = new em_cmd_link_stats_report_t(evt->params, dm);
+    pcmd[num] = new em_cmd_type_send_report_t(evt->params, dm);
 
        //dm.clone_hash_maps(pcmd[num]->m_data_model);
 
@@ -1033,6 +1033,42 @@ int dm_easy_mesh_agent_t::analyze_link_stats_report(em_bus_event_t *evt, em_cmd_
 //         em_printfout("After clone HM sta %s", util::mac_to_string(sta->m_sta_info.id).c_str());
 //         sta = static_cast<dm_sta_t *> (hash_map_get_next(dm.m_sta_map, sta));
 //     }
+    tmp = pcmd[num];
+    num++;
+
+    while ((pcmd[num] = tmp->clone_for_next()) != NULL) {
+        tmp = pcmd[num];
+        num++;
+    }
+
+    return num;
+}
+
+int dm_easy_mesh_agent_t::analyze_send_logs_evt(em_bus_event_t *evt, em_cmd_t *pcmd[])
+{
+    dm_sta_t *sta = NULL;
+    em_cmd_t *tmp = NULL;
+    em_cmd_params_t *evt_param = NULL;
+    dm_easy_mesh_agent_t  dm;
+    unsigned int num = 0, num_radios = 0;
+    mac_addr_str_t macstr;
+    webconfig_subdoc_type_t type;
+
+    dm.init();
+
+    evt_param = &evt->params;
+em_orch_desc_t desc;
+    pcmd[num] = new em_cmd_type_send_report_t(evt->params, dm);
+
+    for (unsigned int i = 0; i < pcmd[num]->m_num_orch_desc; i++) {
+        if (pcmd[num]->m_orch_desc[i].op == dm_orch_type_link_stats_report) {
+            desc.op = dm_orch_type_logger_report;
+            desc.submit = true;
+            pcmd[num]->override_op(i, &desc);
+            break;
+        }
+    }
+
     tmp = pcmd[num];
     num++;
 

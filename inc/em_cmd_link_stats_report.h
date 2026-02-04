@@ -21,7 +21,7 @@
 
 #include "em_cmd.h"
 
-class em_cmd_link_stats_report_t : public em_cmd_t {
+class em_cmd_type_send_report_t : public em_cmd_t {
 
 public:
     
@@ -33,11 +33,11 @@ public:
 	 * @param[in] param The command parameters for the link stats alarm report.
 	 * @param[in,out] dm The easy mesh data structure to be updated.
 	 *
-	 * @returns em_cmd_link_stats_report_t
+	 * @returns em_cmd_type_send_report_t
 	 *
 	 * @note Ensure that the dm structure is properly initialized before calling this function.
 	 */
-	em_cmd_link_stats_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm);
+	em_cmd_type_send_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm);
 };
 
 #endif

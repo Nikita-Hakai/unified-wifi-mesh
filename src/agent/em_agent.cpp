@@ -43,6 +43,8 @@
 
 #include <string>
 #include <vector>
+#include <fcntl.h>
+#include <sys/stat.h>
 #ifdef AL_SAP
 #include "al_service_access_point.h"
 #endif
@@ -793,6 +795,69 @@ void em_agent_t::handle_link_stats_report(em_bus_event_t *evt)
     }
 }
 
+void em_agent_t::handle_collect_logs(em_bus_event_t *evt)
+{
+    if (evt->type == em_bus_event_type_send_logs_pending) {
+        // Only handle collect logs events here
+        em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+        unsigned int num;
+
+        if (m_orch->is_cmd_type_in_progress(evt) == true) {
+            em_printfout("analyze_send_logs_evt in progress");
+        } else if ((num = m_data_model.analyze_send_logs_evt(evt, pcmd)) == 0) {
+            em_printfout("analyze_send_logs_evt failed");
+        } else if (m_orch->submit_commands(pcmd, num) > 0) {
+            em_printfout("Submitted Send Logs cmd for orch");
+        }
+
+        return;
+    }
+    em_client_filters_cfg_t *client_filter_cfg = (em_client_filters_cfg_t *)evt->u.raw_buff;
+    unsigned int duration_seconds = 0;
+    if (client_filter_cfg && client_filter_cfg->collect_duration) {
+        const char *s = client_filter_cfg->collect_duration;
+        int hh = 0, mm = 0, ss = 0;
+        int matched = sscanf(s, "%d:%d:%d", &hh, &mm, &ss);
+        if (matched == 3) {
+            duration_seconds = (unsigned int)(hh * 3600 + mm * 60 + ss);
+        } else if ((matched = sscanf(s, "%d:%d", &mm, &ss)) == 2) {
+            duration_seconds = (unsigned int)(mm * 60 + ss);
+        } else {
+            duration_seconds = (unsigned int)atoi(s);
+        }
+    }
+
+    // Touch debug/control files to indicate collection started
+    auto touch_file = [](const char *path) {
+        int fd = open(path, O_CREAT | O_WRONLY, 0644);
+        if (fd >= 0) close(fd);
+    };
+
+    const char *files_to_touch[] = {
+        "/nvram/wifiHalDbg",
+        "/nvram/wifiCtrlDbg",
+        "/nvram/wifiMgrDbg",
+        "/nvram/wifiLibhostapDbg",
+        "/nvram/wifiWebConfigDbg",
+        "/nvram/wifiPasspointDbg",
+        "/nvram/wifiDMCLI",
+        "/nvram/wifiDbDbg",
+        "/nvram/wifiPsm",
+        "/nvram/wifiHalStatsDbg",
+        NULL
+    };
+
+    for (const char **p = files_to_touch; *p != NULL; ++p) {
+        touch_file(*p);
+    }
+
+    // Start the timer; on expiry handle_timer_expired() will be called
+    start_timer(em_bus_event_type_collect_logs, duration_seconds,
+                (void*)client_filter_cfg, sizeof(em_client_filters_cfg_t));
+
+    em_printfout("Collect logs timer started: duration=%u seconds", duration_seconds);
+}
+
 void em_agent_t::handle_bus_event(em_bus_event_t *evt)
 {   
     
@@ -896,6 +961,17 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
             handle_link_stats_report(evt);
             break;
 
+        case em_bus_event_type_collect_logs:
+        case em_bus_event_type_send_logs_pending:
+            handle_collect_logs(evt);
+            break;
+
+        // case em_bus_event_type_send_logs_pending:
+        //     // No action needed, just a notification
+        //     em_printfout("Received send logs pending event");
+        //     //handle_collect_logs(evt);
+        //     break;
+
         default:
             break;
     }    
@@ -937,12 +1013,113 @@ void em_agent_t::handle_2s_tick()
 
 void em_agent_t::handle_1s_tick()
 {
+    //handle based on type of data
+
+    em_printfout("1 second tick");
+    em_printfout("1 second tick");
+    
+    // Decrement all active timers
+    for (auto it = m_active_timers.begin(); it != m_active_timers.end(); ) {
+        it->remaining_seconds--;
+        
+        if (it->remaining_seconds == 0) {
+            em_printfout("Timer expired for event type %d", it->event_type);
+            // Trigger callback or handle expiration
+            handle_timer_expired(*it);
+            it = m_active_timers.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
 }
 
 void em_agent_t::handle_500ms_tick()
 {
     m_orch->handle_timeout();
+}
+
+void em_agent_t::process_collected_logs(em_client_filters_cfg_t *cfg)
+{
+    em_printfout("Processing collected logs");
+    
+    // Create tar.bz2 archive of /tmp/wifi* files
+    const char *archive_path = "/tmp/wifi_logs.tar.bz2";
+    char cmd[1024];
+    
+    // Create tar.bz2 archive from /tmp/wifi* files
+    snprintf(cmd, sizeof(cmd),
+        "sh -c \"ls /tmp/wifi*  && tar -cjf %s -C /tmp /tmp/wifi* \"",
+        archive_path);
+    int ret = system(cmd);
+    if (ret == 0) {
+        em_printfout("Successfully created logs archive: %s", archive_path);
+    } else {
+        em_printfout("Failed to create logs archive: %s", archive_path);
+    }
+    
+    // Clean up /nvram/wifi* files
+    snprintf(cmd, sizeof(cmd), "rm -rf /nvram/wifi* 2>/dev/null");
+    ret = system(cmd);
+    if (ret == 0) {
+        g_agent.io_process(em_bus_event_type_send_logs_pending, static_cast<char*>(nullptr), 0);
+        em_printfout("Successfully cleaned up /nvram/wifi* files");
+    } else {
+        em_printfout("Failed to clean up /nvram/wifi* files");
+    }
+}
+
+void em_agent_t::handle_timer_expired(const em_timer_t& timer)
+{
+    switch (timer.event_type) {
+        case em_bus_event_type_collect_logs: {
+            em_client_filters_cfg_t *cfg = (em_client_filters_cfg_t *)timer.data;
+            em_printfout("Collect logs timer expired - processing logs");
+            process_collected_logs(cfg);
+            break;
+        }
+
+        default:
+            em_printfout("Timer expired for event type %d", timer.event_type);
+            break;
+    }
+
+    // Cleanup timer data
+    if (timer.data) {
+        free(timer.data);
+    }
+}
+
+unsigned int em_agent_t::start_timer(em_bus_event_type_t event_type, unsigned int duration_seconds,
+                                     void* data, size_t data_len)
+{
+    em_timer_t timer;
+    timer.id = ++m_timer_id_counter;
+    timer.event_type = event_type;
+    timer.remaining_seconds = duration_seconds;
+
+    if (data && data_len > 0) {
+        timer.data = malloc(data_len);
+        memcpy(timer.data, data, data_len);
+        timer.data_len = data_len;
+    } else {
+        timer.data = nullptr;
+        timer.data_len = 0;
+    }
+
+    m_active_timers.push_back(timer);
+    return timer.id;
+}
+
+void em_agent_t::cancel_timer(unsigned int timer_id)
+{
+    for (auto it = m_active_timers.begin(); it != m_active_timers.end(); ++it) {
+        if (it->id == timer_id) {
+            if (it->data) free(it->data);
+            m_active_timers.erase(it);
+            return;
+        }
+    }
 }
 
 int em_agent_t::refresh_onewifi_subdoc(const char * log_name, const webconfig_subdoc_type_t type)

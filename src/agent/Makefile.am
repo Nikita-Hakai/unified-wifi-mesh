@@ -62,6 +62,7 @@ onewifi_em_agent_SOURCES =  \
      $(top_srcdir)/src/em/steering/em_steering.cpp \
      $(top_srcdir)/src/em/policy_cfg/em_policy_cfg.cpp \
      $(top_srcdir)/src/em/crypto/em_crypto.cpp \
+     $(top_srcdir)/src/em/log/em_logger.cpp \
      $(top_srcdir)/src/cmd/em_cmd_ap_cap.cpp \
      $(top_srcdir)/src/cmd/em_cmd_cfg_renew.cpp \
      $(top_srcdir)/src/cmd/em_cmd_channel_pref_query.cpp \
