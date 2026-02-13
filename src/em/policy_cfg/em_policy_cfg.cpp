@@ -323,6 +323,7 @@ short em_policy_cfg_t::create_vendor_policy_cfg_tlv(unsigned char *buff)
     dm_easy_mesh_t *dm;
     dm_policy_t *policy;
     unsigned int i = 0;
+    em_client_filters_cfg_t *filter = NULL;
     int idx_ap = -1;
     int idx_alarm = -1;
     int idx_filter = -1;
@@ -392,6 +393,7 @@ short em_policy_cfg_t::create_vendor_policy_cfg_tlv(unsigned char *buff)
 
         data = reinterpret_cast<em_vendor_data_t *> (cursor);
         data->attr_id = vendor_ext_attr_id_policy_cfg_client_filter;
+        filter = reinterpret_cast<em_client_filters_cfg_t *> (data->vendor_data);
         memcpy(data->vendor_data, reinterpret_cast<unsigned char *> (&policy->m_policy.client_filters), sizeof(em_client_filters_cfg_t));
         
         len += sizeof(data->attr_id) + sizeof(em_client_filters_cfg_t);
@@ -635,7 +637,7 @@ int em_policy_cfg_t::handle_policy_cfg_req(unsigned char *buff, unsigned int len
         } else if (tlv->type == em_tlv_type_vendor_specific) {
             em_vendor_specific_t *vendor_tlv = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
             em_printfout("Recvd vendor tlv, num: %d and tlv->len:%d", vendor_tlv->num, htons(tlv->len));
-            if ((vendor_tlv->num <= 0) || (htons(tlv->len) == 0)) {
+            if ((htons(tlv->len) == 0) || (vendor_tlv->num <= 0)) {
                 break;
             }
 
@@ -645,8 +647,10 @@ int em_policy_cfg_t::handle_policy_cfg_req(unsigned char *buff, unsigned int len
                 data = reinterpret_cast<em_vendor_data_t *> (cursor);
                 em_printfout("vendor attr id is: %d", data->attr_id);
                 if (data->attr_id == vendor_ext_attr_id_policy_sta_marker) {
-                    strncpy(policy.vendor_policy.managed_client_marker, reinterpret_cast<const char *>(data->vendor_data), strlen(reinterpret_cast<char *> (data->vendor_data)) + 1);
-                    em_printfout(" Recvd sta marker: %s", policy.vendor_policy.managed_client_marker);
+                    strncpy(policy.vendor_policy.managed_client_marker,
+                        reinterpret_cast<const char *>(data->vendor_data),
+                        strlen(reinterpret_cast<const char *> (data->vendor_data)) + 1);
+                    em_printfout("Recvd sta marker: %s", policy.vendor_policy.managed_client_marker);
                     cursor += sizeof(data->attr_id) + strlen(reinterpret_cast<char *> (data->vendor_data)) + 1;
                 } else if (data->attr_id == vendor_ext_attr_id_policy_alarm) {
                     em_link_stats_alarm_cfg_t *vendor = reinterpret_cast<em_link_stats_alarm_cfg_t *> (data->vendor_data);
@@ -661,12 +665,14 @@ int em_policy_cfg_t::handle_policy_cfg_req(unsigned char *buff, unsigned int len
                     em_client_filters_cfg_t *vendor = reinterpret_cast<em_client_filters_cfg_t *> (data->vendor_data);
                     memcpy(&policy.vendor_policy.client_filters_policy_cfg, vendor, sizeof(em_client_filters_cfg_t));
 
-                    em_printfout(" Recvd client filters cfg, sta_mac : %s ", util::mac_to_string(
+                    em_printfout("Recvd client filters cfg, sta_mac : %s ", util::mac_to_string(
                         policy.vendor_policy.client_filters_policy_cfg.sta_mac).c_str());
-                    em_printfout(" Recvd client filters cfg, consec_alarm_thres_cnt : %d ", policy.vendor_policy.client_filters_policy_cfg.consec_alarm_thres_cnt);
-                    em_printfout(" Recvd client filters cfg, collect_duration : %s ", policy.vendor_policy.client_filters_policy_cfg.collect_duration);
+                    em_printfout("Recvd client filters cfg, consec_alarm_thres_cnt : %d ", policy.vendor_policy.client_filters_policy_cfg.consec_alarm_thres_cnt);
+                    em_printfout("Recvd client filters cfg, collect_duration : %s ", policy.vendor_policy.client_filters_policy_cfg.collect_duration);
 
                     cursor += sizeof(data->attr_id) + sizeof(em_client_filters_cfg_t);
+
+                    get_mgr()->io_process(em_bus_event_type_collect_logs, reinterpret_cast<unsigned char *> (&policy.vendor_policy.client_filters_policy_cfg), sizeof(em_client_filters_cfg_t));
                 } else {
                     em_printfout(" Unknown vendor attr id: %d ", data->attr_id);
                     break;

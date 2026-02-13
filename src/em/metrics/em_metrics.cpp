@@ -387,7 +387,7 @@ int em_metrics_t::handle_link_stats_alarm_rprt_tlv(unsigned char *buff, size_t l
             em_printfout("Invalid alarm report length");
             break;
         }
-        em_printfout("length : %d", len);
+        em_printfout("length : %zu", len);
 
         dm_easy_mesh_t::macbytes_to_string(link_report->sta_mac, sta_str);
         sta = dm->get_first_sta(link_report->sta_mac);

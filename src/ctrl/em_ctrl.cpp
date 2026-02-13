@@ -425,7 +425,7 @@ void em_ctrl_t::handle_link_stats_alarm_report(em_bus_event_t *evt)
     char *str = NULL;
     raw_data_t raw;
 
-    snprintf(info->name, sizeof(info->name), "alarm_report");
+    // snprintf(info->name, sizeof(info->name), "link_quality_report");
 
     cJSON *parent = cJSON_CreateObject();
     em_printfout("Getting STAList for alarm report\n");

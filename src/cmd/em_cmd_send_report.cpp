@@ -33,13 +33,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <cjson/cJSON.h>
-#include "em_cmd_link_stats_report.h"
+#include "em_cmd_send_report.h"
 
-em_cmd_link_quality_report_t::em_cmd_link_quality_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+em_cmd_send_report_t::em_cmd_send_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
 {
     em_cmd_ctx_t ctx;
 
-    m_type = em_cmd_type_get_link_quality_report;
+    m_type = em_cmd_type_send_report;
     memcpy(&m_param, &param, sizeof(em_cmd_params_t));
     
     memset(reinterpret_cast<unsigned char *> (&m_orch_desc[0]), 0, EM_MAX_CMD*sizeof(em_orch_desc_t));
@@ -49,7 +49,7 @@ em_cmd_link_quality_report_t::em_cmd_link_quality_report_t(em_cmd_params_t param
     m_orch_desc[0].op = dm_orch_type_link_quality_report;
     m_orch_desc[0].submit = true;
 
-    strncpy(m_name, "alarm_report", strlen("alarm_report") + 1);
+    strncpy(m_name, "send_report", strlen("send_report") + 1);
     m_svc = em_service_type_agent;
     init(dm);
 

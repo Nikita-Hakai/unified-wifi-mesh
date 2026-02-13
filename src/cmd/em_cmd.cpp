@@ -457,10 +457,10 @@ void em_cmd_t::init()
             m_svc = em_service_type_ctrl;
             break;
 
-        case em_cmd_type_get_link_quality_report:
-            strncpy(m_name, "get_alarm_report", strlen("get_alarm_report") + 1);
-            m_svc = em_service_type_ctrl;
-            break;
+        // case em_cmd_type_send_report:
+        //     strncpy(m_name, "get_alarm_report", strlen("get_alarm_report") + 1);
+        //     m_svc = em_service_type_ctrl;
+        //     break;
 
         default:
             break;
@@ -507,6 +507,8 @@ const char *em_cmd_t::get_bus_event_type_str(em_bus_event_type_t type)
         BUS_EVENT_TYPE_2S(em_bus_event_type_mld_reconfig)
         BUS_EVENT_TYPE_2S(em_bus_event_type_get_reset)
         BUS_EVENT_TYPE_2S(em_bus_event_type_link_quality_report)
+        BUS_EVENT_TYPE_2S(em_bus_event_type_collect_logs)
+        BUS_EVENT_TYPE_2S(em_bus_event_type_send_logs_pending)
        
         default:
            break;
@@ -638,7 +640,7 @@ const char *em_cmd_t::get_cmd_type_str(em_cmd_type_t type)
         CMD_TYPE_2S(em_cmd_type_beacon_report)
         CMD_TYPE_2S(em_cmd_type_ap_metrics_report)
         CMD_TYPE_2S(em_cmd_type_get_reset)
-        CMD_TYPE_2S(em_cmd_type_get_link_quality_report)
+        CMD_TYPE_2S(em_cmd_type_send_report)
 
         default:
            break;
@@ -782,7 +784,7 @@ em_cmd_type_t em_cmd_t::bus_2_cmd_type(em_bus_event_type_t etype)
             break;
 
         case em_bus_event_type_link_quality_report:
-            type = em_cmd_type_get_link_quality_report;
+            type = em_cmd_type_send_report;
             break;
 
         default:

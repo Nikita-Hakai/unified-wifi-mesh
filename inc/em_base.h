@@ -1519,6 +1519,15 @@ typedef struct {
 } __attribute__((__packed__)) em_vendor_specific_t;
 
 typedef struct {
+    uint32_t transfer_id;
+    uint32_t offset;
+    uint16_t total_chunks;  // Total number of chunks
+    uint16_t seq_num;   // Current chunk number (0-based)
+    uint32_t total_size;
+    unsigned char payload[0];
+} __attribute__((__packed__)) vendor_chunk_header_t;
+
+typedef struct {
     unsigned char  destination;    
     mac_address_t  specific_neigh;
     unsigned char  link_metrics_type; 
@@ -1844,12 +1853,14 @@ typedef struct {
     unsigned int reporting_interval;
     float link_quality_threshold;
 } __attribute__((__packed__)) em_link_stats_alarm_cfg_t;
+//} em_link_stats_alarm_cfg_t;
 
 typedef struct {
     mac_addr_t sta_mac;
     unsigned int consec_alarm_thres_cnt;
     em_small_string_t collect_duration;
 } __attribute__((__packed__)) em_client_filters_cfg_t;
+
 typedef struct {
     em_string_t managed_client_marker;
     em_link_stats_alarm_cfg_t link_stats_alarm_policy_cfg;
@@ -2002,12 +2013,14 @@ typedef enum {
 
 typedef enum {
     // Vendor Extension Attribute for Haul Type with data
+    // of 1 byte having value corresponding to em_haul_type_t
     vendor_ext_attr_id_haul_type = 0x01,    // of 1 byte having value corresponding to em_haul_type_t
     vendor_ext_attr_id_policy_sta_marker,   // string value with variable length
     vendor_ext_attr_id_client_type,      // data of type em_assoc_sta_vendor_link_metrics_t
     vendor_ext_attr_id_policy_alarm,    // data of type em_link_stats_alarm_cfg_t
     vendor_ext_attr_id_policy_cfg_client_filter,    // data of type em_client_filters_cfg_t
     vendor_ext_attr_id_link_report,     // data of type em_link_report_t
+    vendor_ext_attr_id_ap_log,      // data of type vendor_chunk_header_t;
 
     vendor_ext_attr_id_max
 } vendor_ext_attr_id_t;
@@ -2038,6 +2051,7 @@ typedef enum {
     em_state_agent_beacon_report_pending,
     em_state_agent_ap_metrics_pending,
     em_state_agent_link_quality_report_pending,
+    em_state_agent_logger_report_pending,
 
     em_state_ctrl_unconfigured = 0x100,
     em_state_ctrl_wsc_m1_pending,
@@ -2121,7 +2135,7 @@ typedef enum {
     em_cmd_type_ap_metrics_report,
     em_cmd_type_get_reset,
     em_cmd_type_bsta_cap,
-    em_cmd_type_get_link_quality_report,
+    em_cmd_type_send_report,
 
     em_cmd_type_max,
 } em_cmd_type_t;
@@ -2797,6 +2811,8 @@ typedef enum {
     em_bus_event_type_recv_csa_beacon_frame,
     em_bus_event_type_bsta_cap_req,
     em_bus_event_type_link_quality_report,
+    em_bus_event_type_collect_logs,
+    em_bus_event_type_send_logs_pending,
 
     em_bus_event_type_max
 } em_bus_event_type_t;
@@ -2886,7 +2902,10 @@ typedef enum {
     dm_orch_type_mld_reconfig,
     dm_orch_type_beacon_report,
     dm_orch_type_bsta_cap_query,
-    dm_orch_type_link_quality_report
+    dm_orch_type_link_quality_report,
+    dm_orch_type_logger_report,
+
+    dm_orch_type_max
 } dm_orch_type_t;
 
 typedef struct {
@@ -3384,6 +3403,14 @@ static const SecurityTypeMap securityTypeMap[] = {
     { "WPA3 Personal",   EM_AUTH_WPA3_PERSONAL },
     { "WPA3 Transition", EM_AUTH_WPA3_TRANSITION }
 };
+
+typedef struct {
+    unsigned int id;
+    unsigned int remaining_seconds;
+    em_bus_event_type_t event_type;  // which event this timer is for
+    void* data;  // opaque data associated with the timer
+    size_t data_len;
+} em_timer_t;
 
 #ifndef SSL_KEY
 #if OPENSSL_VERSION_NUMBER < 0x30000000L

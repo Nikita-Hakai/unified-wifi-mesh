@@ -29,6 +29,8 @@
 #include "bus.h"
 
 #include <string>
+#include <vector>
+// #include <functional>
 
 #ifdef AL_SAP
 #define DATA_SOCKET_PATH "/tmp/al_data_socket"
@@ -46,6 +48,8 @@ class em_agent_t : public em_mgr_t {
     em_cmd_agent_t  *m_agent_cmd;
 	em_simulator_t	m_simulator;
 
+    std::vector<em_timer_t> m_active_timers;
+    unsigned int m_timer_id_counter;
 	
 	/**!
 	 * @brief Starts the completion process.
@@ -348,6 +352,13 @@ public:
 	 */
 	int refresh_onewifi_subdoc(const char *log_name, const webconfig_subdoc_type_t type) override;
 
+	/* Timer control */
+	unsigned int start_timer(em_bus_event_type_t event_type, unsigned int duration_seconds,
+					void* data = nullptr, size_t data_len = 0);
+	void cancel_timer(unsigned int timer_id);
+	void handle_timer_expired(const em_timer_t& timer);
+	void process_collected_logs(em_client_filters_cfg_t *cfg);
+	void handle_collect_logs(em_bus_event_t *evt);
     
 	/**
 	 * @brief Send an action frame

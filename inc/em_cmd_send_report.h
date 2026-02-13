@@ -16,28 +16,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef EM_CMD_LINK_STATS_REPORT_H
-#define EM_CMD_LINK_STATS_REPORT_H
+#ifndef EM_CMD_SEND_REPORT_H
+#define EM_CMD_SEND_REPORT_H
 
 #include "em_cmd.h"
 
-class em_cmd_link_quality_report_t : public em_cmd_t {
+class em_cmd_send_report_t : public em_cmd_t {
 
 public:
     
 	/**!
 	 * @brief 
 	 *
-	 * This function handles the link stats alarm report command.
+	 * This function handles the send report command.
 	 *
-	 * @param[in] param The command parameters for the link stats alarm report.
+	 * @param[in] param The command parameters for the send report.
 	 * @param[in,out] dm The easy mesh data structure to be updated.
 	 *
-	 * @returns em_cmd_link_quality_report_t
+	 * @returns em_cmd_send_report_t
 	 *
 	 * @note Ensure that the dm structure is properly initialized before calling this function.
 	 */
-	em_cmd_link_quality_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm);
+	em_cmd_send_report_t(em_cmd_params_t param, dm_easy_mesh_t& dm);
 };
 
 #endif

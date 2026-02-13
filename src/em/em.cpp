@@ -251,8 +251,12 @@ void em_t::orch_execute(em_cmd_t *pcmd)
             m_sm.set_state(em_state_ctrl_bsta_cap_pending);
             break;
 
-        case em_cmd_type_get_link_quality_report:
-            m_sm.set_state(em_state_agent_link_quality_report_pending);
+        case em_cmd_type_send_report:
+            if (pcmd->get_orch_op() == dm_orch_type_link_quality_report) {
+                m_sm.set_state(em_state_agent_link_quality_report_pending);
+            } else if ((pcmd->get_orch_op() == dm_orch_type_logger_report)) {
+                m_sm.set_state(em_state_agent_logger_report_pending);
+            }
             break;
 
         default:
@@ -329,6 +333,7 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_ap_metrics_rsp:
         case em_msg_type_topo_vendor:
             em_metrics_t::process_msg(data, len);
+            em_logger_t::process_msg(data, len);
             break;
 
         case em_msg_type_dpp_cce_ind:
@@ -439,9 +444,11 @@ void em_t::handle_agent_state()
             }
             break;
 
-        case em_cmd_type_get_link_quality_report:
+        case em_cmd_type_send_report:
             if (m_sm.get_state() == em_state_agent_link_quality_report_pending) {
                 em_metrics_t::process_agent_state();
+            } else if (m_sm.get_state() == em_state_agent_logger_report_pending) {
+                em_logger_t::process_agent_state();
             }
             break;
 
