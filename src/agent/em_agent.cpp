@@ -1414,16 +1414,6 @@ int em_agent_t::report_cb(char *event_name, raw_data_t *data, void *userData)
     return 0;
 }
 
-int em_agent_t::link_stats_report_cb(char *event_name, raw_data_t *data, void *userData)
-{
-    em_printfout("Received Frame data for event [%s] and data :\n%s\n", event_name, data->raw_data.bytes);
-    (void)userData;
-
-   // g_agent.io_process(em_bus_event_type_ap_metrics_report, (unsigned char *)data->raw_data.bytes, data->raw_data_len);
-
-    return 0;
-}
-
 int em_agent_t::beacon_report_cb(char *event_name, raw_data_t *data, void *userData)
 {
     //printf("%s:%d Received Frame data for event [%s] and data :\n%s\n", __func__, __LINE__, event_name, data->raw_data.bytes);

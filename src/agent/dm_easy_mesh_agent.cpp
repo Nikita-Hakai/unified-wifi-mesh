@@ -51,7 +51,7 @@
 #include "em_cmd_beacon_report.h"
 #include "em_cmd_sta_link_metrics.h"
 #include "em_cmd_ap_metrics_report.h"
-#include "em_cmd_link_stats_report.h"
+#include "em_cmd_send_report.h"
 
 #ifdef AL_SAP
 #include "al_service_access_point.h"
