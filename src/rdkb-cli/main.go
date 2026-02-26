@@ -1855,7 +1855,7 @@ func getWirelessProfilesHandler(w http.ResponseWriter, r *http.Request) {
                     http.Error(w, fmt.Sprintf("Invalid PassPhrase for %s: %v", haul.HaulType, err), http.StatusBadRequest)
                     return
                 }
-                if err := updateNetworkSSIDList(ssidTree, haul); err != nil {
+                if err := updateNetworkSSIDList(ssidTree, haul, true); err != nil {
                     http.Error(w, fmt.Sprintf("Update failed for %s: %v", haul.HaulType, err), http.StatusInternalServerError)
                     return
                 }
@@ -3373,7 +3373,7 @@ func WifiResetHandler(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
         case http.MethodGet:
             log.Println("Received GET request for wifireset")
-            collocatedValue := getTreeValue(resetTree, "CollocatedAgentID")
+            controllerValue := getTreeValue(resetTree, "ControllerID")
 
             // Interface MACs
             interfacesList := C.get_network_tree_by_key(resetTree, C.CString("List"))
@@ -3390,7 +3390,7 @@ func WifiResetHandler(w http.ResponseWriter, r *http.Request) {
 
             response := MacResponse{
                 Options:        macOptions,
-                SelectedOption: collocatedValue,
+                SelectedOption: controllerValue,
                 SSIDHaulConfig: ssidHaulConfig,
             }
 
@@ -3410,8 +3410,8 @@ func WifiResetHandler(w http.ResponseWriter, r *http.Request) {
             if payload.SelectedMac != "" {
                 selectedMac := strings.Split(payload.SelectedMac, " ")[0]
 
-                // update the CollocatedAgentID in reset tree
-                if err := updateCollocatedAgentID(resetTree, selectedMac); err != nil {
+                // update the ControllerID in reset tree
+                if err := updateControllerID(resetTree, selectedMac); err != nil {
                     msg := fmt.Sprintf("Update failed for AL_MAC Interface: %v", err)
                     errorsList = append(errorsList, msg)
                 }
@@ -3429,12 +3429,13 @@ func WifiResetHandler(w http.ResponseWriter, r *http.Request) {
                     http.Error(w, fmt.Sprintf("Invalid PassPhrase for %s: %v", haul.HaulType, err), http.StatusBadRequest)
                     return
                 }
-                if err := updateNetworkSSIDList(resetTree, haul); err != nil {
+                if err := updateNetworkSSIDList(resetTree, haul, false); err != nil {
                     http.Error(w, fmt.Sprintf("Update failed for %s: %v", haul.HaulType, err), http.StatusInternalServerError)
                     return
                 }
             }
 
+			dumpNetNode(resetTree);
             if applyResetConfig(resetTree) != true {
                 msg := fmt.Sprintf("Failed to apply wifi reset config")
                 errorsList = append(errorsList, msg)
@@ -3529,26 +3530,26 @@ func getConfiguredHauls(tree *C.em_network_node_t) []HaulConfig {
     return haulConfigs
 }
 
-/* func: updateCollocatedAgentID
+/* func: updateControllerID
  * Description:
- * updates the CollocatedAgentID value in the given reset configuration tree
+ * updates the ControllerID value in the given reset configuration tree
  * based on the selected or manually entered MAC address, validates its format,
  * and executes the reset command to apply the updated configuration.
  * Return: true or false
  */
-func updateCollocatedAgentID(resetTree *C.em_network_node_t, selectedMac string) error {
+func updateControllerID(resetTree *C.em_network_node_t, selectedMac string) error {
     if !isValidMac(selectedMac) {
         return fmt.Errorf("invalid MAC address: %s", selectedMac)
     }
 
     cMac := C.CString(selectedMac)
-    cKey := C.CString("CollocatedAgentID")
+    cKey := C.CString("ControllerID")
     defer C.free(unsafe.Pointer(cMac))
     defer C.free(unsafe.Pointer(cKey))
 
     node := C.get_network_tree_by_key(resetTree, cKey)
     if node == nil {
-        return fmt.Errorf("CollocatedAgentID node not found in reset tree")
+        return fmt.Errorf("ControllerID node not found in reset tree")
     }
 
     buf := (*[256]byte)(unsafe.Pointer(&node.value_str[0]))
@@ -3565,7 +3566,7 @@ func updateCollocatedAgentID(resetTree *C.em_network_node_t, selectedMac string)
  * Searches the NetworkSSIDList for a matching HaulType and updates its SSID and PassPhrase fields.
  * returns: nil on successful update; otherwise an error if the list or matching HaulType is not found.
  */
-func updateNetworkSSIDList(networkSSIDTree *C.em_network_node_t, haul HaulConfig ) error {
+func updateNetworkSSIDList(networkSSIDTree *C.em_network_node_t, haul HaulConfig,  isWirelessProfileUpdate bool) error {
     networkKey := C.CString("NetworkSSIDList")
     defer C.free(unsafe.Pointer(networkKey))
 
@@ -3591,10 +3592,12 @@ func updateNetworkSSIDList(networkSSIDTree *C.em_network_node_t, haul HaulConfig
         if strings.Contains(haulTypeStr,  haul.HaulType) {
             updateNodeValue(item, "SSID",  haul.SSID)
             updateNodeValue(item, "PassPhrase", haul.PassPhrase)
-            updateNodeValue(item, "AuthType", haul.SecurityType)
-            updateNodeBool(item, "Enable", haul.Enabled)
-            updateNodeInt(item, "VLANID", haul.VlanID)
-            updateNodeArray(item, "Band", normalizeBandsArray(haul.Bands))
+            if (isWirelessProfileUpdate) {
+                updateNodeValue(item, "AuthType", haul.SecurityType)
+                updateNodeBool(item, "Enable", haul.Enabled)
+                updateNodeInt(item, "VLANID", haul.VlanID)
+                updateNodeArray(item, "Band", normalizeBandsArray(haul.Bands))
+            }
         }
     }
     return nil

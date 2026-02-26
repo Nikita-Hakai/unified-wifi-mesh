@@ -318,7 +318,6 @@ int em_metrics_t::handle_ap_metrics_tlv(unsigned char *buff, bssid_t get_bssid)
     if (bss != NULL) {
         bss->numberofsta = htons(ap_metrics->num_sta);
         dm_easy_mesh_t::macbytes_to_string(ap_metrics->bssid, bss_str);
-        printf("%s:%d Num of stas associated to BSS[%s] is: %d\n", __func__, __LINE__, bss_str, bss->numberofsta);
     } else {
         dm_easy_mesh_t::macbytes_to_string(ap_metrics->bssid, bss_str);
         printf("%s:%d BSS not found: %s\n", __func__, __LINE__, bss_str);
@@ -1024,7 +1023,6 @@ int em_metrics_t::send_ap_metrics_response()
     short sz = 0;
     unsigned short type = htons(ETH_P_1905);
     dm_easy_mesh_t *dm = get_data_model();
-    mac_addr_str_t mac_str;
     dm_sta_t *sta;
     int bss_index = 0;
 
@@ -1148,18 +1146,18 @@ int em_metrics_t::send_ap_metrics_response()
     len += (sizeof(em_tlv_t));
 
     if (em_msg_t(em_msg_type_ap_metrics_rsp, em_profile_type_2, buff, static_cast<unsigned int> (len)).validate(errors) == 0) {
-        printf("%s:%d: AP Metrics Response validation failed for %s\n", __func__, __LINE__, mac_str);
+        em_printfout("AP Metrics Response validation failed for agent:%s, still sending",
+            util::mac_to_string(dm->get_agent_al_interface_mac()).c_str());
         //return -1;
     }
 
     if (send_frame(buff, static_cast<unsigned int> (len))  < 0) {
-        printf("%s:%d: AP Metrics Response send failed, error:%d\n", __func__, __LINE__, errno);
+        em_printfout("AP Metrics Response send failed, error:%d\n", errno);
         return -1;
     }
 
-    printf("%s:%d: AP Metrics Response send success\n", __func__, __LINE__);
-
     set_state(em_state_agent_configured);
+    em_printfout("AP Metrics Response sent for %u BSSs, %d Radios", dm->m_num_bss, get_current_cmd()->get_param()->u.ap_metrics_params.num_radios);
 
     return static_cast<int> (len);
 }
@@ -1425,13 +1423,11 @@ short em_metrics_t::create_ap_metrics_tlv(unsigned char *buff, dm_bss_t &dm_bss)
     for(i = 0; i < get_current_cmd()->get_param()->u.ap_metrics_params.num_radios; i++) {
         if (memcmp(dm_bss.m_bss_info.ruid.mac,
             get_current_cmd()->get_param()->u.ap_metrics_params.ruid[i], sizeof(mac_addr_t)) == 0) {
-            em_printfout("Creating ap response for radio ruid: %s", util::mac_to_string(dm_bss.m_bss_info.ruid.mac).c_str());
             break;
         }
     }
     if (memcmp(dm_bss.m_bss_info.ruid.mac, 
         get_current_cmd()->get_param()->u.ap_metrics_params.ruid[i], sizeof(mac_addr_t)) == 0) {
-        em_printfout("Creating ap response for bssid: %s", util::mac_to_string(dm_bss.m_bss_info.bssid.mac).c_str());
 
         memcpy(ap_metrics->bssid, dm_bss.m_bss_info.bssid.mac, sizeof(mac_address_t));
         len += static_cast<size_t> (sizeof(mac_address_t));
@@ -1463,7 +1459,6 @@ short em_metrics_t::create_ap_ext_metrics_tlv(unsigned char *buff, dm_bss_t &dm_
     for(i = 0; i < get_current_cmd()->get_param()->u.ap_metrics_params.num_radios; i++) {
         if (memcmp(dm_bss.m_bss_info.ruid.mac,
             get_current_cmd()->get_param()->u.ap_metrics_params.ruid[i], sizeof(mac_addr_t)) == 0) {
-            em_printfout("Creating ap response for radio ruid: %s", util::mac_to_string(dm_bss.m_bss_info.ruid.mac).c_str());
             break;
         }
     }

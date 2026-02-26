@@ -142,7 +142,7 @@ em_network_topo_t *em_network_topo_t::find_topology_by_bh_associated(dm_easy_mes
 	// and return that topology object.
 	mac_address_t bss_mac;
 	memcpy(bss_mac, bss->id.bssid, sizeof(mac_address_t));
-	if (dm->get_colocated() == false) {
+	if (dm->is_controller() == false) {
 		// Update the backhaul of the dm object with the bss mac address
 		memcpy(dm->m_device.m_device_info.backhaul_mac.mac, bss_mac, sizeof(mac_address_t));
 		dm->m_device.m_device_info.backhaul_mac.media = em_media_type_ieee80211ac_5;
@@ -256,6 +256,10 @@ void em_network_topo_t::add_network_topo(dm_easy_mesh_t *dm, em_network_topo_t *
 void em_network_topo_t::add(dm_easy_mesh_t *dm, em_network_topo_t **child_topos, unsigned int num_child_topos)
 {
 	em_network_topo_t *topo;
+	if (dm == NULL) {
+		em_printfout("dm is NULL, cannot add topology");
+		return;
+	}
 
 	// find the BH bss where al_mac of this device of data model is attached to.
 	if ((topo = find_topology_by_bh_associated(dm)) != NULL) {
