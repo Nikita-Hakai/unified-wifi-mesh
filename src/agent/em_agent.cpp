@@ -2416,6 +2416,30 @@ em_agent_t::~em_agent_t()
 {
 
 }
+
+// TEMP INSTRUMENTATION (memory_opt): print the footprint of the shared data-model
+// types that the agent embeds. Remove once sizing decisions are made.
+static void em_agent_print_struct_sizes()
+{
+    em_printfout("\n============== EasyMesh struct footprint (bytes) ==============\n");
+    em_printfout("  %-30s %12zu\n", "em_cmd_t",              sizeof(em_cmd_t));
+    em_printfout("  em_cmd_t x EM_MAX_CMD(%d)   %12zu\n", EM_MAX_CMD, sizeof(em_cmd_t) * EM_MAX_CMD);
+    em_printfout("  %-30s %12zu\n", "dm_easy_mesh_t (base)", sizeof(dm_easy_mesh_t));
+    em_printfout("  %-30s %12zu\n", "dm_easy_mesh_agent_t",  sizeof(dm_easy_mesh_agent_t));
+    em_printfout("  ---- dm_easy_mesh_t embedded arrays: element x count = total ----\n");
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_bss_t",         sizeof(dm_bss_t),          EM_MAX_BSSS,      sizeof(dm_bss_t)          * EM_MAX_BSSS);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_op_class_t",    sizeof(dm_op_class_t),     EM_MAX_OPCLASS,   sizeof(dm_op_class_t)     * EM_MAX_OPCLASS);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_policy_t",      sizeof(dm_policy_t),       EM_MAX_POLICIES,  sizeof(dm_policy_t)       * EM_MAX_POLICIES);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_radio_t",       sizeof(dm_radio_t),        EM_MAX_BANDS,     sizeof(dm_radio_t)        * EM_MAX_BANDS);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_radio_cap_t",   sizeof(dm_radio_cap_t),    EM_MAX_BANDS,     sizeof(dm_radio_cap_t)    * EM_MAX_BANDS);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_network_ssid_t",sizeof(dm_network_ssid_t), EM_MAX_NET_SSIDS, sizeof(dm_network_ssid_t) * EM_MAX_NET_SSIDS);
+    em_printfout("  ---- underlying info structs ----\n");
+    em_printfout("  %-30s %12zu\n", "em_bss_info_t",      sizeof(em_bss_info_t));
+    em_printfout("  %-30s %12zu\n", "em_op_class_info_t", sizeof(em_op_class_info_t));
+    em_printfout("  %-30s %12zu\n", "em_policy_t",        sizeof(em_policy_t));
+    em_printfout("===============================================================\n\n");
+}
+
 #ifdef AL_SAP
 AlServiceAccessPoint* em_agent_t::al_sap_register(const std::string& data_socket_path, const std::string& control_socket_path)
 {
@@ -2454,6 +2478,9 @@ int main(int argc, const char *argv[])
         printf("Usage: %s [data-model-path] [--interface=al_mac_iface] [--start-dpp-onboard] [--regen-dpp-uri]\n", argv[0]);
         return 0;
     }
+
+    // TEMP INSTRUMENTATION (memory_opt): print struct footprint at startup.
+    em_agent_print_struct_sizes();
 
     std::string data_model_path = "";
 
