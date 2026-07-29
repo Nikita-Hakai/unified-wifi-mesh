@@ -1,0 +1,866 @@
+diff --git a/inc/em_cmd.h b/inc/em_cmd.h
+index 3a281e44..c89127ad 100644
+--- a/inc/em_cmd.h
++++ b/inc/em_cmd.h
+@@ -23,6 +23,7 @@
+ #include "em_ctrl.h"
+ #include <sys/time.h>
+ #include <cstring>
++#include <memory>
+ #include <type_traits>
+ #include "dm_easy_mesh.h"
+ 
+@@ -34,7 +35,7 @@ public:
+     em_event_t  *m_evt;
+     em_string_t m_name;
+     queue_t *m_em_candidates;
+-    dm_easy_mesh_t  m_data_model;
++	std::unique_ptr<dm_easy_mesh_t> m_data_model;
+     struct timeval  m_start_time;
+ 
+     unsigned int m_orch_op_idx;
+@@ -171,7 +172,7 @@ public:
+ 	 *
+ 	 * @returns Pointer to the data model instance.
+ 	 */
+-	dm_easy_mesh_t *get_data_model() { return &m_data_model; }
++	dm_easy_mesh_t *get_data_model() { return m_data_model.get(); }
+ 
+     
+ 	/**!
+@@ -296,7 +297,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned pointer is valid before using it.
+ 	 */
+-	em_interface_t *get_ctrl_al_interface() { return m_data_model.get_ctrl_al_interface(); }
++	em_interface_t *get_ctrl_al_interface() { return m_data_model->get_ctrl_al_interface(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the agent AL interface.
+@@ -307,7 +308,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned pointer is valid before using it.
+ 	 */
+-	em_interface_t *get_agent_al_interface() { return m_data_model.get_agent_al_interface(); }
++	em_interface_t *get_agent_al_interface() { return m_data_model->get_agent_al_interface(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the radio interface for the specified index.
+@@ -321,7 +322,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the index is within the valid range of available radio interfaces.
+ 	 */
+-	em_interface_t *get_radio_interface(unsigned int index) { return m_data_model.get_radio_interface(index); }
++	em_interface_t *get_radio_interface(unsigned int index) { return m_data_model->get_radio_interface(index); }
+         
+     
+ 	/**!
+@@ -333,7 +334,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned pointer is handled appropriately to avoid memory issues.
+ 	 */
+-	unsigned char *get_al_interface_mac() { return m_data_model.get_agent_al_interface_mac(); }
++	unsigned char *get_al_interface_mac() { return m_data_model->get_agent_al_interface_mac(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the manufacturer name.
+@@ -344,14 +345,14 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned string is properly managed to avoid memory leaks.
+ 	 */
+-	char *get_manufacturer() { return m_data_model.get_manufacturer(); }
++	char *get_manufacturer() { return m_data_model->get_manufacturer(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the manufacturer model.
+ 	 *
+ 	 * @returns A pointer to a character string containing the manufacturer model.
+ 	 */
+-	char *get_manufacturer_model() { return m_data_model.get_manufacturer_model(); }
++	char *get_manufacturer_model() { return m_data_model->get_manufacturer_model(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the serial number.
+@@ -362,7 +363,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned pointer is not null before using it.
+ 	 */
+-	char *get_serial_number() { return m_data_model.get_serial_number(); }
++	char *get_serial_number() { return m_data_model->get_serial_number(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the IEEE 1905 security capabilities.
+@@ -376,7 +377,7 @@ public:
+ 	 * @note Ensure that the returned pointer is not null before accessing
+ 	 * the security capabilities.
+ 	 */
+-	em_ieee_1905_security_cap_t *get_ieee_1905_security_cap() { return m_data_model.get_ieee_1905_security_cap(); }
++	em_ieee_1905_security_cap_t *get_ieee_1905_security_cap() { return m_data_model->get_ieee_1905_security_cap(); }
+     
+ 	/**!
+ 	 * @brief Retrieves the primary device type.
+@@ -387,7 +388,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the returned string is not modified or freed by the caller.
+ 	 */
+-	char *get_primary_device_type() { return m_data_model.get_primary_device_type(); }
++	char *get_primary_device_type() { return m_data_model->get_primary_device_type(); }
+ 
+     
+ 	/**!
+@@ -397,7 +398,7 @@ public:
+ 	 *
+ 	 * @returns The number of network SSIDs.
+ 	 */
+-	unsigned int get_num_network_ssid() { return m_data_model.get_num_network_ssid(); }
++	unsigned int get_num_network_ssid() { return m_data_model->get_num_network_ssid(); }
+ 
+     
+ 	/**!
+@@ -411,7 +412,7 @@ public:
+ 	 *
+ 	 * @note Ensure the index is within the valid range of available network SSIDs.
+ 	 */
+-	dm_network_ssid_t *get_network_ssid(unsigned int index) { return m_data_model.get_network_ssid(index); }
++	dm_network_ssid_t *get_network_ssid(unsigned int index) { return m_data_model->get_network_ssid(index); }
+     
+ 	/**!
+ 	 * @brief Retrieves the DPP (Data Processing Pointer) from the data model.
+@@ -422,7 +423,7 @@ public:
+ 	 * @returns A pointer to the dm_dpp_t structure.
+ 	 * @note Ensure that the returned pointer is not null before using it.
+ 	 */
+-	dm_dpp_t *get_dpp() { return m_data_model.get_dpp(); }
++	dm_dpp_t *get_dpp() { return m_data_model->get_dpp(); }
+     
+ 	/**!
+ 	 * @brief Retrieves a radio object from the data model.
+@@ -437,7 +438,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the index is within the valid range of available radios.
+ 	 */
+-	dm_radio_t *get_radio(unsigned int index) { return m_data_model.get_radio(index); }
++	dm_radio_t *get_radio(unsigned int index) { return m_data_model->get_radio(index); }
+     
+ 	/**!
+ 	 * @brief Retrieves the current operation class for a given index.
+@@ -452,7 +453,7 @@ public:
+ 	 *
+ 	 * @note Ensure that the index is within the valid range before calling this function.
+ 	 */
+-	dm_op_class_t *get_curr_op_class(unsigned int index) { return m_data_model.get_curr_op_class(index); }
++	dm_op_class_t *get_curr_op_class(unsigned int index) { return m_data_model->get_curr_op_class(index); }
+     
+ 	/**!
+ 	 * @brief Retrieves the radio data for a given interface.
+@@ -468,7 +469,7 @@ public:
+ 	 * @note Ensure that the interface provided is valid and initialized
+ 	 *       before calling this function.
+ 	 */
+-	rdk_wifi_radio_t *get_radio_data(em_interface_t *radio) { return m_data_model.get_radio_data(radio); };
++	rdk_wifi_radio_t *get_radio_data(em_interface_t *radio) { return m_data_model->get_radio_data(radio); };
+     
+ 	/**!
+ 	 * @brief Retrieves the current read operation class.
+@@ -553,7 +554,7 @@ public:
+ 	 *
+ 	 * @note This function does not take any parameters and does not return any value.
+ 	 */
+-	void reset_cmd_ctx() { m_data_model.reset_cmd_ctx(); }
++	void reset_cmd_ctx() { m_data_model->reset_cmd_ctx(); }
+ 
+     
+ 	/**!
+diff --git a/src/agent/dm_easy_mesh_agent.cpp b/src/agent/dm_easy_mesh_agent.cpp
+index 54c3b7d2..484bb60e 100644
+--- a/src/agent/dm_easy_mesh_agent.cpp
++++ b/src/agent/dm_easy_mesh_agent.cpp
+@@ -89,13 +89,13 @@ int dm_easy_mesh_agent_t::analyze_dev_init(em_bus_event_t *evt, em_cmd_t *pcmd[]
+     pcmd[num] = new em_cmd_dev_init_t(evt->params, dm);
+     tmp = pcmd[num];
+ 
+-    for (unsigned int i = 0; i < pcmd[num]->m_data_model.m_num_radios; i++) {
++    for (unsigned int i = 0; i < pcmd[num]->m_data_model->m_num_radios; i++) {
+         em_printfout("dm num_role:%u for radio[%u]:%s\n", dm.get_radio_cap_info(i)->wifi6_cap.num_role,
+                 i, util::mac_to_string(dm.get_radio_cap_info(i)->ruid.mac).c_str());
+-        em_printfout("num_role:%u\n", pcmd[num]->m_data_model.get_radio_cap_info(i)->wifi6_cap.num_role);
++        em_printfout("num_role:%u\n", pcmd[num]->m_data_model->get_radio_cap_info(i)->wifi6_cap.num_role);
+         // em_printfout("su_beam:%d\n", pcmd[num]->m_data_model.get_radio_cap_info(i)->wifi6_cap.su_beam_former);
+-        em_printfout("wifi 7 rad mac:%s\n", util::mac_to_string(pcmd[num]->m_data_model.get_radio_cap_info(i)->wifi7_cap.mlo_cap_support.ruid).c_str());
+-        em_printfout("he cap rad mac:%s\n", util::mac_to_string(pcmd[num]->m_data_model.get_radio_cap_info(i)->he_cap.ruid).c_str());
++        em_printfout("wifi 7 rad mac:%s\n", util::mac_to_string(pcmd[num]->m_data_model->get_radio_cap_info(i)->wifi7_cap.mlo_cap_support.ruid).c_str());
++        em_printfout("he cap rad mac:%s\n", util::mac_to_string(pcmd[num]->m_data_model->get_radio_cap_info(i)->he_cap.ruid).c_str());
+     }
+     num++;
+ 
+@@ -180,7 +180,7 @@ int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[]
+ 
+             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.bssid, bss_mac_str);
+             snprintf(key, sizeof(em_long_string_t), "%s@%s@%s", sta_mac_str, bss_mac_str, radio_mac_str);
+-            hash_map_put(pcmd[num]->m_data_model.m_sta_assoc_map, strdup(key), new dm_sta_t(*sta));
++            hash_map_put(pcmd[num]->m_data_model->m_sta_assoc_map, strdup(key), new dm_sta_t(*sta));
+             sta = static_cast<dm_sta_t *> (hash_map_get_next(dm.m_sta_assoc_map, sta));
+         }
+ 
+@@ -211,7 +211,7 @@ int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[]
+ 
+             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.bssid, bss_mac_str);
+             snprintf(key, sizeof(em_long_string_t), "%s@%s@%s", sta_mac_str, bss_mac_str, radio_mac_str);
+-            hash_map_put(pcmd[num]->m_data_model.m_sta_dassoc_map, strdup(key), new dm_sta_t(*sta));
++            hash_map_put(pcmd[num]->m_data_model->m_sta_dassoc_map, strdup(key), new dm_sta_t(*sta));
+             sta = static_cast<dm_sta_t *> (hash_map_get_next(dm.m_sta_dassoc_map, sta));
+         }
+ 
+@@ -782,7 +782,7 @@ int dm_easy_mesh_agent_t::analyze_sta_link_metrics(em_bus_event_t *evt, em_cmd_t
+     dm.translate_and_decode_onewifi_subdoc(reinterpret_cast<char *> (evt->u.raw_buff), webconfig_subdoc_type_em_sta_link_metrics,
+         "Link Metrics");
+     pcmd[num]->m_svc = em_service_type_agent;
+-    dm.clone_hash_maps(pcmd[num]->m_data_model);
++    dm.clone_hash_maps(*pcmd[num]->m_data_model);
+ 
+     tmp = pcmd[num];
+     num++;
+diff --git a/src/cmd/em_cmd.cpp b/src/cmd/em_cmd.cpp
+index 6d03fdf6..65e25b54 100644
+--- a/src/cmd/em_cmd.cpp
++++ b/src/cmd/em_cmd.cpp
+@@ -189,15 +189,19 @@ void em_cmd_t::deinit()
+         queue_destroy(m_em_candidates);
+         m_em_candidates = nullptr;
+     }
+-    m_data_model.deinit();
++    if (m_data_model != nullptr) {
++        m_data_model->deinit();
++        m_data_model.reset();
++    }
+ 	//free(m_evt);
+ }
+ 
+ void em_cmd_t::init(dm_easy_mesh_t& dm)
+ {
+     m_em_candidates = queue_create();
+-    m_data_model.init();
+-    m_data_model = dm;
++    m_data_model = std::make_unique<dm_easy_mesh_t>();
++    m_data_model->init();
++    *m_data_model = dm;
+ }
+ 
+ em_cmd_t *em_cmd_t::clone()
+@@ -206,9 +210,8 @@ em_cmd_t *em_cmd_t::clone()
+     unsigned int i;
+     em_cmd_ctx_t *pctx, ctx;
+ 
+-    out = new em_cmd_t(m_type, m_param, m_data_model);
++    out = new em_cmd_t(m_type, m_param, *m_data_model);
+ 
+-    out->m_data_model = m_data_model;
+     out->set_orch_op_index(m_orch_op_idx);
+     out->m_num_orch_desc = m_num_orch_desc;
+     for (i = 0; i < m_num_orch_desc; i++) {
+@@ -216,10 +219,10 @@ em_cmd_t *em_cmd_t::clone()
+         out->m_orch_desc[i].submit = m_orch_desc[i].submit;
+     }
+ 
+-    pctx = m_data_model.get_cmd_ctx();	
++    pctx = m_data_model->get_cmd_ctx();
+     memcpy(&ctx, pctx, sizeof(em_cmd_ctx_t));	
+     ctx.arr_index += 1;
+-    out->m_data_model.set_cmd_ctx(&ctx);
++    out->m_data_model->set_cmd_ctx(&ctx);
+     return out;
+ }
+ 
+@@ -233,9 +236,8 @@ em_cmd_t *em_cmd_t::clone_for_next()
+         return NULL;
+     }
+ 
+-    out = new em_cmd_t(m_type, m_param, m_data_model);
++    out = new em_cmd_t(m_type, m_param, *m_data_model);
+ 
+-    out->m_data_model = m_data_model;
+     out->set_orch_op_index(m_orch_op_idx + 1);
+     out->m_num_orch_desc = m_num_orch_desc;
+     for (i = 0; i < m_num_orch_desc; i++) {
+@@ -245,7 +247,7 @@ em_cmd_t *em_cmd_t::clone_for_next()
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = out->get_orch_op();
+-    out->m_data_model.set_cmd_ctx(&ctx);
++    out->m_data_model->set_cmd_ctx(&ctx);
+ 
+     return out;
+ }
+@@ -256,9 +258,9 @@ void em_cmd_t::override_op(unsigned int index, em_orch_desc_t *desc)
+ 
+     m_orch_desc[index].op = desc->op;
+     m_orch_desc[index].submit = desc->submit;
+-    ctx = m_data_model.get_cmd_ctx();
++    ctx = m_data_model->get_cmd_ctx();
+     ctx->type = desc->op;
+-    m_data_model.set_cmd_ctx(ctx);
++    m_data_model->set_cmd_ctx(ctx);
+ }
+ 
+ void em_cmd_t::init()
+diff --git a/src/cmd/em_cmd_ap_cap.cpp b/src/cmd/em_cmd_ap_cap.cpp
+index a56e9a31..43661077 100644
+--- a/src/cmd/em_cmd_ap_cap.cpp
++++ b/src/cmd/em_cmd_ap_cap.cpp
+@@ -55,6 +55,6 @@ em_cmd_ap_cap_report_t::em_cmd_ap_cap_report_t(em_cmd_params_t param, dm_easy_me
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op; 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_ap_metrics_report.cpp b/src/cmd/em_cmd_ap_metrics_report.cpp
+index 435a8d9b..a799680a 100644
+--- a/src/cmd/em_cmd_ap_metrics_report.cpp
++++ b/src/cmd/em_cmd_ap_metrics_report.cpp
+@@ -54,6 +54,6 @@ em_cmd_ap_metrics_report_t::em_cmd_ap_metrics_report_t(em_cmd_params_t param, dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_beacon_report.cpp b/src/cmd/em_cmd_beacon_report.cpp
+index cca80299..ca66ec9b 100644
+--- a/src/cmd/em_cmd_beacon_report.cpp
++++ b/src/cmd/em_cmd_beacon_report.cpp
+@@ -55,6 +55,6 @@ em_cmd_beacon_report_t::em_cmd_beacon_report_t(em_cmd_params_t param, dm_easy_me
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_bsta_cap.cpp b/src/cmd/em_cmd_bsta_cap.cpp
+index 3520cfcb..a066ca92 100644
+--- a/src/cmd/em_cmd_bsta_cap.cpp
++++ b/src/cmd/em_cmd_bsta_cap.cpp
+@@ -38,6 +38,6 @@ em_cmd_bsta_cap_t::em_cmd_bsta_cap_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+ 
+    memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+    ctx.type = m_orch_desc[0].op;
+-   m_data_model.set_cmd_ctx(&ctx);
++   m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_btm_report.cpp b/src/cmd/em_cmd_btm_report.cpp
+index 268e67c0..3519c066 100644
+--- a/src/cmd/em_cmd_btm_report.cpp
++++ b/src/cmd/em_cmd_btm_report.cpp
+@@ -56,6 +56,6 @@ em_cmd_btm_report_t::em_cmd_btm_report_t(em_cmd_btm_report_params_t params)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_cfg_renew.cpp b/src/cmd/em_cmd_cfg_renew.cpp
+index 7e7ee0f7..3de75b36 100644
+--- a/src/cmd/em_cmd_cfg_renew.cpp
++++ b/src/cmd/em_cmd_cfg_renew.cpp
+@@ -46,5 +46,5 @@ em_cmd_cfg_renew_t::em_cmd_cfg_renew_t(em_service_type_t service, em_cmd_params_
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;    
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_channel_pref_query.cpp b/src/cmd/em_cmd_channel_pref_query.cpp
+index 0a8f5196..075b7d16 100644
+--- a/src/cmd/em_cmd_channel_pref_query.cpp
++++ b/src/cmd/em_cmd_channel_pref_query.cpp
+@@ -43,10 +43,10 @@ em_cmd_channel_pref_query_t::em_cmd_channel_pref_query_t(em_service_type_t servi
+     snprintf(m_name, sizeof(m_name), "%s", "channel_pref_query");
+     m_svc = em_service_type_ctrl;
+     init(dm);
+-    m_data_model.set_msg_id(dm.msg_id);
++    m_data_model->set_msg_id(dm.msg_id);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_client_cap.cpp b/src/cmd/em_cmd_client_cap.cpp
+index d71d8c98..212c0bc4 100644
+--- a/src/cmd/em_cmd_client_cap.cpp
++++ b/src/cmd/em_cmd_client_cap.cpp
+@@ -55,6 +55,6 @@ em_cmd_client_cap_report_t::em_cmd_client_cap_report_t(em_cmd_params_t param, dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op; 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_dev_init.cpp b/src/cmd/em_cmd_dev_init.cpp
+index 8cb06632..574660e8 100644
+--- a/src/cmd/em_cmd_dev_init.cpp
++++ b/src/cmd/em_cmd_dev_init.cpp
+@@ -56,6 +56,6 @@ em_cmd_dev_init_t::em_cmd_dev_init_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;    
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_dev_test.cpp b/src/cmd/em_cmd_dev_test.cpp
+index 9654ce68..218be493 100644
+--- a/src/cmd/em_cmd_dev_test.cpp
++++ b/src/cmd/em_cmd_dev_test.cpp
+@@ -57,6 +57,6 @@ em_cmd_dev_test_t::em_cmd_dev_test_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_em_config.cpp b/src/cmd/em_cmd_em_config.cpp
+index 53b47a9a..64c64018 100644
+--- a/src/cmd/em_cmd_em_config.cpp
++++ b/src/cmd/em_cmd_em_config.cpp
+@@ -72,6 +72,6 @@ em_cmd_em_config_t::em_cmd_em_config_t(em_cmd_params_t param, dm_easy_mesh_t& dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_get_channel.cpp b/src/cmd/em_cmd_get_channel.cpp
+index bb6dbfd0..e5e21fe7 100644
+--- a/src/cmd/em_cmd_get_channel.cpp
++++ b/src/cmd/em_cmd_get_channel.cpp
+@@ -52,7 +52,7 @@ em_cmd_get_channel_t::em_cmd_get_channel_t(em_cmd_params_t param, dm_easy_mesh_t
+     init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+ 
+diff --git a/src/cmd/em_cmd_get_device.cpp b/src/cmd/em_cmd_get_device.cpp
+index bb825493..2c2040c8 100644
+--- a/src/cmd/em_cmd_get_device.cpp
++++ b/src/cmd/em_cmd_get_device.cpp
+@@ -52,6 +52,6 @@ em_cmd_get_device_t::em_cmd_get_device_t(em_cmd_params_t param, dm_easy_mesh_t&
+ 	init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++	m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_get_mld_config.cpp b/src/cmd/em_cmd_get_mld_config.cpp
+index 577db7a2..e745c009 100644
+--- a/src/cmd/em_cmd_get_mld_config.cpp
++++ b/src/cmd/em_cmd_get_mld_config.cpp
+@@ -52,5 +52,5 @@ em_cmd_get_mld_config_t::em_cmd_get_mld_config_t(em_cmd_params_t param, dm_easy_
+     init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_get_network.cpp b/src/cmd/em_cmd_get_network.cpp
+index 28cbf109..c2b78753 100644
+--- a/src/cmd/em_cmd_get_network.cpp
++++ b/src/cmd/em_cmd_get_network.cpp
+@@ -52,5 +52,5 @@ em_cmd_get_network_t::em_cmd_get_network_t(em_cmd_params_t param, dm_easy_mesh_t
+     init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_get_radio.cpp b/src/cmd/em_cmd_get_radio.cpp
+index 131ba4cc..ef7d82b7 100644
+--- a/src/cmd/em_cmd_get_radio.cpp
++++ b/src/cmd/em_cmd_get_radio.cpp
+@@ -52,7 +52,7 @@ em_cmd_get_radio_t::em_cmd_get_radio_t(em_cmd_params_t param, dm_easy_mesh_t& dm
+ 	init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++	m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+ 
+diff --git a/src/cmd/em_cmd_get_ssid.cpp b/src/cmd/em_cmd_get_ssid.cpp
+index 2e65a9f6..9a8600c9 100644
+--- a/src/cmd/em_cmd_get_ssid.cpp
++++ b/src/cmd/em_cmd_get_ssid.cpp
+@@ -53,7 +53,7 @@ em_cmd_get_ssid_t::em_cmd_get_ssid_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+     init(dm);
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+ 
+diff --git a/src/cmd/em_cmd_link_stats_report.cpp b/src/cmd/em_cmd_link_stats_report.cpp
+index 626ada3a..6826ffd6 100644
+--- a/src/cmd/em_cmd_link_stats_report.cpp
++++ b/src/cmd/em_cmd_link_stats_report.cpp
+@@ -55,6 +55,6 @@ em_cmd_link_quality_report_t::em_cmd_link_quality_report_t(em_cmd_params_t param
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_mld_reconfig.cpp b/src/cmd/em_cmd_mld_reconfig.cpp
+index 52d4952c..7b6f5667 100644
+--- a/src/cmd/em_cmd_mld_reconfig.cpp
++++ b/src/cmd/em_cmd_mld_reconfig.cpp
+@@ -55,6 +55,6 @@ em_cmd_mld_reconfig_t::em_cmd_mld_reconfig_t()
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_onewifi_cb.cpp b/src/cmd/em_cmd_onewifi_cb.cpp
+index 87551c5c..eb7243f6 100644
+--- a/src/cmd/em_cmd_onewifi_cb.cpp
++++ b/src/cmd/em_cmd_onewifi_cb.cpp
+@@ -55,6 +55,6 @@ em_cmd_ow_cb_t::em_cmd_ow_cb_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_op_channel_report.cpp b/src/cmd/em_cmd_op_channel_report.cpp
+index b776e7b0..e146e0d1 100644
+--- a/src/cmd/em_cmd_op_channel_report.cpp
++++ b/src/cmd/em_cmd_op_channel_report.cpp
+@@ -55,6 +55,6 @@ em_cmd_op_channel_report_t::em_cmd_op_channel_report_t(em_cmd_params_t param, dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_remove_device.cpp b/src/cmd/em_cmd_remove_device.cpp
+index 65ebf8d3..cb76644d 100644
+--- a/src/cmd/em_cmd_remove_device.cpp
++++ b/src/cmd/em_cmd_remove_device.cpp
+@@ -56,5 +56,5 @@ em_cmd_remove_device_t::em_cmd_remove_device_t(em_cmd_params_t param, dm_easy_me
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;    
+-    m_data_model.set_cmd_ctx(&ctx);
++	m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_reset.cpp b/src/cmd/em_cmd_reset.cpp
+index 0fce8c50..8da4b1ac 100644
+--- a/src/cmd/em_cmd_reset.cpp
++++ b/src/cmd/em_cmd_reset.cpp
+@@ -57,5 +57,5 @@ em_cmd_reset_t::em_cmd_reset_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_scan_channel.cpp b/src/cmd/em_cmd_scan_channel.cpp
+index c0809145..9277cc2f 100644
+--- a/src/cmd/em_cmd_scan_channel.cpp
++++ b/src/cmd/em_cmd_scan_channel.cpp
+@@ -56,5 +56,5 @@ em_cmd_scan_channel_t::em_cmd_scan_channel_t(em_cmd_params_t param, dm_easy_mesh
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_scan_result.cpp b/src/cmd/em_cmd_scan_result.cpp
+index c36f1232..aa2dd5ec 100644
+--- a/src/cmd/em_cmd_scan_result.cpp
++++ b/src/cmd/em_cmd_scan_result.cpp
+@@ -56,5 +56,5 @@ em_cmd_scan_result_t::em_cmd_scan_result_t(em_cmd_params_t param, dm_easy_mesh_t
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_set_channel.cpp b/src/cmd/em_cmd_set_channel.cpp
+index 22950e65..89eab9e2 100644
+--- a/src/cmd/em_cmd_set_channel.cpp
++++ b/src/cmd/em_cmd_set_channel.cpp
+@@ -56,5 +56,5 @@ em_cmd_set_channel_t::em_cmd_set_channel_t(em_cmd_params_t param, dm_easy_mesh_t
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_set_policy.cpp b/src/cmd/em_cmd_set_policy.cpp
+index 737ed917..98044b2b 100644
+--- a/src/cmd/em_cmd_set_policy.cpp
++++ b/src/cmd/em_cmd_set_policy.cpp
+@@ -58,5 +58,5 @@ em_cmd_set_policy_t::em_cmd_set_policy_t(em_cmd_params_t param, dm_easy_mesh_t&
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_set_radio.cpp b/src/cmd/em_cmd_set_radio.cpp
+index 2ba28706..c78e1893 100644
+--- a/src/cmd/em_cmd_set_radio.cpp
++++ b/src/cmd/em_cmd_set_radio.cpp
+@@ -56,5 +56,5 @@ em_cmd_set_radio_t::em_cmd_set_radio_t(em_cmd_params_t param, dm_easy_mesh_t& dm
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_set_ssid.cpp b/src/cmd/em_cmd_set_ssid.cpp
+index ec511f89..9dc9c78a 100644
+--- a/src/cmd/em_cmd_set_ssid.cpp
++++ b/src/cmd/em_cmd_set_ssid.cpp
+@@ -58,5 +58,5 @@ em_cmd_set_ssid_t::em_cmd_set_ssid_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_sta_assoc.cpp b/src/cmd/em_cmd_sta_assoc.cpp
+index f6a4c6c6..6385b1e1 100644
+--- a/src/cmd/em_cmd_sta_assoc.cpp
++++ b/src/cmd/em_cmd_sta_assoc.cpp
+@@ -59,6 +59,6 @@ em_cmd_sta_assoc_t::em_cmd_sta_assoc_t(em_cmd_params_t param, dm_easy_mesh_t& dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_sta_disassoc.cpp b/src/cmd/em_cmd_sta_disassoc.cpp
+index 7a975087..7167f6a4 100644
+--- a/src/cmd/em_cmd_sta_disassoc.cpp
++++ b/src/cmd/em_cmd_sta_disassoc.cpp
+@@ -56,6 +56,6 @@ em_cmd_sta_disassoc_t::em_cmd_sta_disassoc_t(em_cmd_disassoc_params_t params)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_sta_link_metrics.cpp b/src/cmd/em_cmd_sta_link_metrics.cpp
+index 830e38f6..ef5cfaed 100644
+--- a/src/cmd/em_cmd_sta_link_metrics.cpp
++++ b/src/cmd/em_cmd_sta_link_metrics.cpp
+@@ -53,6 +53,6 @@ em_cmd_sta_link_metrics_t::em_cmd_sta_link_metrics_t(dm_easy_mesh_t& dm)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_sta_list.cpp b/src/cmd/em_cmd_sta_list.cpp
+index 62883118..1ff30c2d 100644
+--- a/src/cmd/em_cmd_sta_list.cpp
++++ b/src/cmd/em_cmd_sta_list.cpp
+@@ -57,6 +57,6 @@ em_cmd_sta_list_t::em_cmd_sta_list_t(em_cmd_params_t param, dm_easy_mesh_t& dm)
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;    
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_sta_steer.cpp b/src/cmd/em_cmd_sta_steer.cpp
+index d92f1875..5f2b69ac 100644
+--- a/src/cmd/em_cmd_sta_steer.cpp
++++ b/src/cmd/em_cmd_sta_steer.cpp
+@@ -56,6 +56,6 @@ em_cmd_sta_steer_t::em_cmd_sta_steer_t(em_cmd_steer_params_t params)
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_topo_sync.cpp b/src/cmd/em_cmd_topo_sync.cpp
+index aed574d0..bb7d0966 100644
+--- a/src/cmd/em_cmd_topo_sync.cpp
++++ b/src/cmd/em_cmd_topo_sync.cpp
+@@ -55,6 +55,6 @@ em_cmd_topo_sync_t::em_cmd_topo_sync_t(em_cmd_params_t param, dm_easy_mesh_t& dm
+ 
+     memset(&ctx, 0, sizeof(em_cmd_ctx_t));
+     ctx.type = m_orch_desc[0].op;
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+ 
+diff --git a/src/cmd/em_cmd_unassoc_sta_query.cpp b/src/cmd/em_cmd_unassoc_sta_query.cpp
+index 7941aa1f..26ddf9b8 100644
+--- a/src/cmd/em_cmd_unassoc_sta_query.cpp
++++ b/src/cmd/em_cmd_unassoc_sta_query.cpp
+@@ -69,5 +69,5 @@ em_cmd_unassoc_sta_query_t::em_cmd_unassoc_sta_query_t(em_cmd_params_t param, dm
+ 
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/cmd/em_cmd_unassoc_sta_result.cpp b/src/cmd/em_cmd_unassoc_sta_result.cpp
+index 073b077f..5c4d0bcb 100644
+--- a/src/cmd/em_cmd_unassoc_sta_result.cpp
++++ b/src/cmd/em_cmd_unassoc_sta_result.cpp
+@@ -61,5 +61,5 @@ em_cmd_unassoc_sta_result_t::em_cmd_unassoc_sta_result_t(em_cmd_params_t param,
+ 
+     ctx.type = m_orch_desc[0].op;
+ 
+-    m_data_model.set_cmd_ctx(&ctx);
++    m_data_model->set_cmd_ctx(&ctx);
+ }
+diff --git a/src/dm/dm_easy_mesh.cpp b/src/dm/dm_easy_mesh.cpp
+index cd7d7c02..e1e1cf3b 100644
+--- a/src/dm/dm_easy_mesh.cpp
++++ b/src/dm/dm_easy_mesh.cpp
+@@ -293,12 +293,12 @@ int dm_easy_mesh_t::commit_config(em_cmd_t  *cmd)
+                 switch (cmd->get_orch_op()) {
+                     case dm_orch_type_al_insert: {
+                         uint8_t saved_emplus = m_device.m_device_info.is_emplus_agent;
+-                        m_device = cmd->m_data_model.m_device;
++                        m_device = cmd->m_data_model->m_device;
+                         m_device.m_device_info.is_emplus_agent = saved_emplus;
+                         break;
+                     }
+                     case dm_orch_type_em_insert:
+-                        m_radio[m_num_radios] = cmd->m_data_model.m_radio[0];
++                        m_radio[m_num_radios] = cmd->m_data_model->m_radio[0];
+                         m_num_radios++;
+ 
+                         break;
+diff --git a/src/em/em.cpp b/src/em/em.cpp
+index e36ed821..e8291d1c 100644
+--- a/src/em/em.cpp
++++ b/src/em/em.cpp
+@@ -115,7 +115,7 @@ void em_t::orch_execute(em_cmd_t *pcmd)
+ 			break;
+ 
+         case em_cmd_type_start_dpp: {
+-            ec_data_t *dpp_info = pcmd->m_data_model.get_dpp()->get_dpp_info();
++            ec_data_t *dpp_info = pcmd->m_data_model->get_dpp()->get_dpp_info();
+             printf("ORCH: Start DPP\n");
+             printf("ORCH: DPP: \n");
+             printf("\tDPP: Version: %d\n", dpp_info->version);
+diff --git a/src/orch/em_orch_agent.cpp b/src/orch/em_orch_agent.cpp
+index b2394542..bff2f85f 100644
+--- a/src/orch/em_orch_agent.cpp
++++ b/src/orch/em_orch_agent.cpp
+@@ -227,7 +227,7 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
+     mac_addr_str_t sta_mac_str, bss_mac_str, radio_mac_str;
+     em_freq_band_t band;
+ 
+-    ctx = pcmd->m_data_model.get_cmd_ctx();
++    ctx = pcmd->m_data_model->get_cmd_ctx();
+ 
+     switch (pcmd->get_orch_op()) {
+         case dm_orch_type_al_insert:
+@@ -240,7 +240,7 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
+             }
+             config.type = em_commit_target_al;
+             //commit basic configuration before orchestrate
+-            dm->commit_config(pcmd->m_data_model, config);
++            dm->commit_config(*pcmd->m_data_model, config);
+             em = m_mgr->create_node(intf, em_freq_band_unknown, dm, 1, em_profile_type_3, em_service_type_agent);
+             if (em != NULL) {
+                 printf("%s:%d: AL node created\n", __func__, __LINE__);
+@@ -256,9 +256,9 @@ bool em_orch_agent_t::pre_process_orch_op(em_cmd_t *pcmd)
+                 dm_easy_mesh_t::macbytes_to_string(intf->mac, mac_str);
+                 config.type = em_commit_target_radio;
+                 snprintf(reinterpret_cast<char*>(&config.params[0]), sizeof(config.params), "%s", mac_str);
+-                dm->commit_config(pcmd->m_data_model, config);
++                dm->commit_config(*pcmd->m_data_model, config);
+                 config.type = em_commit_target_bss;
+-                dm->commit_config(pcmd->m_data_model, config);
++                dm->commit_config(*pcmd->m_data_model, config);
+                 band =  pcmd->get_radio(i)->get_radio_info()->band;
+                 em_printfout("calling create_node band=%d", band);
+                 if ((em = m_mgr->create_node(intf, band, dm, 0, em_profile_type_3, em_service_type_agent)) == NULL) {
+@@ -370,13 +370,13 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
+     mac_address_t	radio_mac, mac1, mac2;
+     dm_sta_t *sta;
+ 
+-    ctx = pcmd->m_data_model.get_cmd_ctx();
++    ctx = pcmd->m_data_model->get_cmd_ctx();
+ 	pthread_mutex_lock(&m_mgr->m_mutex);
+     em = static_cast<em_t *> (hash_map_get_first(m_mgr->m_em_map));
+     while (em != NULL) {
+         switch (pcmd->m_type) {
+             case em_cmd_type_dev_init:
+-                radio = pcmd->m_data_model.get_radio(ctx->arr_index);
++                radio = pcmd->m_data_model->get_radio(ctx->arr_index);
+                 dm_easy_mesh_t::macbytes_to_string(radio->get_radio_interface_mac(), src_mac_str);
+                 dm_easy_mesh_t::macbytes_to_string(em->get_radio_interface_mac(), dst_mac_str);
+ 				if (!(em->is_al_interface_em())) {
+@@ -423,7 +423,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
+ 		        break;
+ 	        case em_cmd_type_client_cap_query:
+                 if (!(em->is_al_interface_em())) {
+-                    radio = pcmd->m_data_model.get_radio(static_cast<unsigned int> (0));
++                    radio = pcmd->m_data_model->get_radio(static_cast<unsigned int> (0));
+ 		            if (radio == NULL) {
+                         printf("%s:%d client cap radio cannot be found.\n", __func__, __LINE__);
+                         break;
+@@ -460,7 +460,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
+ 				break;
+             case em_cmd_type_op_channel_report:
+                 if (!(em->is_al_interface_em())) {
+-                    radio = pcmd->m_data_model.get_radio(static_cast<unsigned int> (0));
++                    radio = pcmd->m_data_model->get_radio(static_cast<unsigned int> (0));
+                     if (radio == NULL) {
+                         printf("%s:%d channel sel radio cannot be found.\n", __func__, __LINE__);
+                         break;
+diff --git a/src/orch/em_orch_ctrl.cpp b/src/orch/em_orch_ctrl.cpp
+index 5d0401f7..4e2b415d 100644
+--- a/src/orch/em_orch_ctrl.cpp
++++ b/src/orch/em_orch_ctrl.cpp
+@@ -431,7 +431,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
+     em_t *em;
+     em_ctrl_t *ctrl = static_cast<em_ctrl_t *>(m_mgr);
+     dm_easy_mesh_ctrl_t *dm_ctrl = reinterpret_cast<dm_easy_mesh_ctrl_t *>(ctrl->get_data_model(GLOBAL_NET_ID));
+-    dm_easy_mesh_t *dm = &pcmd->m_data_model;
++    dm_easy_mesh_t *dm = pcmd->m_data_model.get();
+     dm_easy_mesh_t *mgr_dm;
+     mac_addr_str_t	mac_str;
+     em_commit_target_t config;
+@@ -471,7 +471,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
+             if (em != NULL) {
+                 config.type = em_commit_target_em;
+                 // since this does not have to go through orchestration of M1 M2, commit the data model
+-                em->get_data_model()->commit_config(pcmd->m_data_model, config);
++                em->get_data_model()->commit_config(*pcmd->m_data_model, config);
+             }
+             break;
+ 
