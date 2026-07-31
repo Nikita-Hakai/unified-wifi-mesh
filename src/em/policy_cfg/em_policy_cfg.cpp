@@ -104,9 +104,12 @@ short em_policy_cfg_t::create_metrics_rep_policy_tlv(unsigned char *buff)
     unsigned int radio_cnt = 0;
 
     for (i = 0; i < dm->get_num_policy(); i++) {
+                em_printfout("%s:%d Entering\n", __func__, __LINE__);
 		policy = &dm->m_policy[i];
 		if (policy->m_policy.id.type == em_policy_id_type_radio_metrics_rep) {
+                    em_printfout("%s:%d Entering\n", __func__, __LINE__);
             for(unsigned int r = 0; r < get_data_model()->get_num_radios(); r++) {
+                em_printfout("%s:%d Entering radio_mac is %s and ruid is %s\n", __func__, __LINE__, util::mac_to_string(policy->m_policy.id.radio_mac).c_str(), util::mac_to_string(get_data_model()->get_radio_info(r)->id.ruid).c_str());
                 if ((memcmp(policy->m_policy.id.radio_mac, get_data_model()->get_radio_info(r)->id.ruid, sizeof(mac_address_t)) == 0)) {
                     radio_metric = &metric->radios[radio_cnt];
                     em_printfout(" Radio %d MAC: %s", radio_cnt, util::mac_to_string(policy->m_policy.id.radio_mac).c_str());
@@ -118,6 +121,7 @@ short em_policy_cfg_t::create_metrics_rep_policy_tlv(unsigned char *buff)
                     if (policy->m_policy.sta_traffic_stats == true) {
                         radio_metric->sta_policy |= (1 << 7);
                     }
+                    em_printfout("%s:%d sta_lik_metric is %d\n", __func__, __LINE__, policy->m_policy.sta_link_metric);
                     if (policy->m_policy.sta_link_metric == true) {
                         radio_metric->sta_policy |= (1 << 6);
                     }
