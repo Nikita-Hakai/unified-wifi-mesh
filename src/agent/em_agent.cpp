@@ -1633,7 +1633,7 @@ int em_agent_t::association_status_cb(char *event_name, bus_data_prop_t *data, v
         em_printfout("NULL data from OneWiFi callback!");
         return -1;
     }
-    g_agent.io_process(em_bus_event_type_assoc_status, reinterpret_cast<unsigned char *>(data->value.raw_data.bytes), data->value.raw_data_len);
+    //g_agent.io_process(em_bus_event_type_assoc_status, reinterpret_cast<unsigned char *>(data->value.raw_data.bytes), data->value.raw_data_len);
     return 1;
 }
 
@@ -1891,17 +1891,20 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 
     assert(len > ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))));
     if (len < ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)))) {
-        return NULL;
+        em_printfout("%s %d len : %u comparision-le  : %u\n", __func__, __LINE__, len, (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)));  
+	return NULL;
     }
    
     hdr = reinterpret_cast<em_raw_hdr_t *>(data);
 
     if (hdr->type != htons(ETH_P_1905)) {
+	 em_printfout("%s %d header type failure\n", __func__, __LINE__);
         return NULL;
     }
    
     cmdu = reinterpret_cast<em_cmdu_t *>(data + sizeof(em_raw_hdr_t));
 
+    em_printfout("%s:%d: FrameType:%d\n", __func__, __LINE__, htons(cmdu->type));
     switch (htons(cmdu->type)) {
 	case em_msg_type_autoconf_resp:
 		found = false;
@@ -1920,7 +1923,8 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 			if (!(em->is_al_interface_em())) {
 				if (em->is_matching_freq_band(&band) == true) {
 					if ((em->get_state() != em_state_agent_autoconfig_renew_pending) && (em->get_state() !=em_state_agent_wsc_m2_pending) && 
-                        (em->get_state() != em_state_agent_owconfig_pending) && (em->get_state() != em_state_agent_1905_securing)) {
+                        (em->get_state() != em_state_agent_owconfig_pending) && (em->get_state() != em_state_agent_1905_securing) &&
+                        (em->get_state() != em_state_agent_wsc_m2_config_skipping)) {
 						found = true;
 						break;
 					} else {
@@ -1994,6 +1998,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 		case em_msg_type_autoconf_wsc:
 			if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                 	len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_radio_id(&ruid) == false) {
+				em_printfout("%s:%d: Failed here\n", __func__, __LINE__);
 				return NULL;
 			}
 
@@ -2001,6 +2006,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
          if ((em = static_cast<em_t *>(hash_map_get(m_em_map, mac_str1))) != NULL) {
             	printf("%s:%d: Found existing radio:%s\n", __func__, __LINE__, mac_str1);
         	} else {
+			         em_printfout("%s:%d: Radio not found%s\n", __func__, __LINE__, mac_str1);
 				return NULL;
 			}
 			break;

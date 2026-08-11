@@ -189,6 +189,8 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_fini(em_cmd_t *pcmd, em_t *em)
                 return true;
             } else if (em->get_state() == em_state_ctrl_topo_synchronized) {
                 return true;
+            } else if (em->get_state() == em_state_ctrl_topo_published) {
+                return true;
             } else if (em->get_state() == em_state_ctrl_channel_queried) {
                 return true;
             } else if (em->get_state() == em_state_ctrl_configured) {
@@ -328,6 +330,8 @@ bool em_orch_ctrl_t::is_em_ready_for_orch_exec(em_cmd_t *pcmd, em_t *em)
                 return true;
             } else if (em->get_state() == em_state_ctrl_topo_synchronized) {
                 return true;
+            } else if (em->get_state() == em_state_ctrl_topo_published) {
+                return true;
             } else if (em->get_state() == em_state_ctrl_channel_queried) {
                 return true;
             } else if (em->get_state() == em_state_ctrl_channel_selected) {
@@ -431,7 +435,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 	mac_address_t radio_mac, dev_mac;
 	em_2xlong_string_t criteria;
 
-    //printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
+    printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
     switch (pcmd->get_orch_op()) {
         case dm_orch_type_db_reset:
             dm_ctrl->reset_config();
