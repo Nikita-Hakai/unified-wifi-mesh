@@ -233,7 +233,7 @@ AlServiceDataUnit AlServiceAccessPoint::serviceAccessPointDataIndication() {
 
         // Pull bytes from the socket until at least one full frame is buffered.
         while (!hasBufferedMessage()) {
-            std::vector<unsigned char> chunk(SOCKET_MTU, 0x00);
+            std::vector<unsigned char> chunk(SOCKET_MTU, 0x00); //SOCKET_MTU = 65535
             ssize_t bytesRead = recv(alDataSocketDescriptor, chunk.data(), chunk.size(), 0);
             if (bytesRead <= 0) {
                 if (bytesRead == 0 || errno == EBADF || errno == ECONNRESET) {
