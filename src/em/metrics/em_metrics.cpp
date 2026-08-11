@@ -139,7 +139,9 @@ int em_metrics_t::handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff, 
     sta_metrics = reinterpret_cast<em_assoc_sta_vendor_link_metrics_t *> (vendor_data->vendor_data);
 
     sta = dm->find_sta(sta_metrics->sta_mac, sta_metrics->bssid);
+    em_printfout("sta %s for bssid: %s", util::mac_to_string(sta_metrics->sta_mac).c_str(), util::mac_to_string(sta_metrics->bssid).c_str());
     if (sta != NULL && len >= sizeof(em_assoc_sta_vendor_link_metrics_t)) {
+        em_printfout("Entering %s %d with client type as %s\n", __func__, __LINE__, sta->m_sta_info.sta_client_type);
         strncpy(sta->m_sta_info.sta_client_type, sta_metrics->sta_client_type, sizeof(sta->m_sta_info.sta_client_type));
     }
 
@@ -691,13 +693,13 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
     dm = get_data_model();
 
     if (em_msg_t(em_msg_type_ap_metrics_rsp, get_profile_type(), buff, len).validate(errors) == 0) {
-        printf("%s:%d: AP Metrics metrics response msg validation failed\n", __func__, __LINE__);
-        return -1;
+        em_printfout("%s:%d: AP Metrics metrics response msg validation failed\n", __func__, __LINE__);
+        //return -1;
     }
 
     if (len < sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)) {
         em_printfout("Frame shorter than the 1905 headers");
-        return -1;
+        //return -1;
     }
 
     tlv_start =  reinterpret_cast<em_tlv_t *> (buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
@@ -707,6 +709,7 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
     tlv = tlv_start;
     tmp_len = base_len;
 
+    em_printfout("Entering %s:%d\n", __func__, __LINE__);
     while ((tmp_len >= sizeof(em_tlv_t)) && (tlv->type != em_tlv_type_eom)) {
         /* Stop before a TLV that runs past the received bytes; tmp_len would underflow. */
         size_t tlv_total = sizeof(em_tlv_t) + static_cast<size_t> (ntohs(tlv->len));
