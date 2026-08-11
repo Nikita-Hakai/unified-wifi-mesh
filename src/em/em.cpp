@@ -299,7 +299,6 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_topo_resp:
         case em_msg_type_topo_query:
         case em_msg_type_topo_notif:
-        case em_msg_type_failed_conn:
         case em_msg_type_ap_mld_config_req:
         case em_msg_type_ap_mld_config_resp:
         case em_msg_type_bss_config_req:
@@ -354,6 +353,11 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
             em_printfout("  proto_process, type rcvd: %d\n", htons(cmdu->type));
             em_steering_t::process_msg(data, len);
             break;
+
+        case em_msg_type_failed_conn:
+            em_metrics_t::process_msg(data, len);
+            break;
+
         case em_msg_type_1905_ack:
             if (m_sm.get_state() == em_state_ctrl_ap_mld_configured) {
                 em_configuration_t::process_msg(data, len);
@@ -623,7 +627,9 @@ void em_t::proto_run()
                     continue;
                 }
                 pthread_mutex_unlock(&m_iq.lock);
-                if (evt->type == em_event_type_frame) {
+                em_printfout("%s %d [DL] pop from queue\n", __func__, __LINE__);
+		if (evt->type == em_event_type_frame) {
+		   em_printfout("%s %d [DL]\n", __func__, __LINE__);
                     proto_process(evt->u.fevt.frame, evt->u.fevt.frame_len);
                 } else if (evt->type == em_event_type_cmd){
                     // em_cmd_event_t cevnt;
@@ -2971,7 +2977,7 @@ bool em_t::initialize_ec_manager(){
                                                 this, std::placeholders::_1);
         ops.send_autoconf_search_resp =
             std::bind(&em_t::send_autoconf_search_resp_ext_chirp, this, std::placeholders::_1,
-                      std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+                      std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5);
     }
 
     // Read in the persistent security context for the controller or agent

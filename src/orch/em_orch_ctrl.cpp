@@ -79,6 +79,16 @@ void em_orch_ctrl_t::orch_transient(em_cmd_t *pcmd, em_t *em)
                     dm->set_ssid_mismatch_check_time(0);
                     dm->set_last_topo_query_sent_time(0);
                     cancel_command(pcmd->get_type(), all_em_radios);
+                    /* Escalate like the SSID-mismatch path so a stuck agent redoes WSC;
+                     * the renew tx budget re-arms at the threshold, keeping this bounded. */
+                    em_printfout("Topology sync did not complete within TTL, sending Autoconfig Renew on all radios and transitioning to misconfigured state");
+                    for (em_t *radio : all_em_radios) {
+                        em_configuration_t *cfg = static_cast<em_configuration_t *>(radio);
+                        radio->set_state(em_state_ctrl_misconfigured);
+                        if (cfg->send_autoconfig_renew_msg() < 0) {
+                            em_printfout("Autoconfig Renew send failed for radio:%s", util::mac_to_string(radio->get_radio_interface_mac()).c_str());
+                        }
+                    }
                     return;
                 }
 
@@ -425,7 +435,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 	mac_address_t radio_mac, dev_mac;
 	em_2xlong_string_t criteria;
 
-    //printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
+    printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
     switch (pcmd->get_orch_op()) {
         case dm_orch_type_db_reset:
             dm_ctrl->reset_config();
