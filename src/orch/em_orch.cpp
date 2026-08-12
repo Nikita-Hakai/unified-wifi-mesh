@@ -551,6 +551,11 @@ void em_orch_t::handle_timeout()
         pcmd = static_cast<em_cmd_t *>(queue_peek(m_active, static_cast<unsigned int>(i)));
 	printf("%s:%d: Cmd: %s, em candidates: %d\n", __func__, __LINE__, 
 		em_cmd_t::get_cmd_type_str(pcmd->m_type), queue_count(pcmd->m_em_candidates));
+		//printf("%s:%d: Cmd: %s, em candidates: %d\n", __func__, __LINE__,
+					//em_cmd_t::get_cmd_type_str(pcmd->m_type), queue_count(pcmd->m_em_candidates));
+        // ret must be evaluated per command; carrying it across commands lets one
+        // non-fini command block destruction of every other command in the queue
+        ret = true;
         for (j = static_cast<int>(queue_count(pcmd->m_em_candidates)) - 1; j >= 0; j--) {
             em = static_cast<em_t *>(queue_peek(pcmd->m_em_candidates, static_cast<unsigned int>(j)));
             ret &= orchestrate(pcmd, em);
@@ -568,7 +573,6 @@ void em_orch_t::handle_timeout()
             }
             destroy_command(pcmd);
             //em->set_state(em_state_agent_config_complete);
-            break;
         }
 
     }
