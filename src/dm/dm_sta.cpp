@@ -151,14 +151,6 @@ int dm_sta_t::decode(const cJSON *obj, void *parent_id)
 
 }
 
-// Weak no-op — overridden by private repo when present.
-// Private repo decodes its own fields from the same JSON object and
-// populates m_sta_ext without exposing any types or field names here.
-// extern "C" __attribute__((weak)) void custom_decode_sta(dm_sta_t *sta, const cJSON *obj)
-// {
-//     (void)sta; (void)obj;
-// }
-
 void dm_sta_t::encode(cJSON *obj, em_get_sta_list_reason_t reason)
 {
     mac_addr_str_t  mac_str;
@@ -565,57 +557,12 @@ void dm_sta_t::decode_beacon_report(dm_sta_t *sta)
    }
 }
 
-// dm_sta_t::dm_sta_t()
-//     : m_sta_ext(create_dm_sta_ext())
-// {
-//     memset(&m_sta_info, 0, sizeof(em_sta_info_t));
-// }
-
-// dm_sta_t::dm_sta_t(em_sta_info_t *sta)
-//     : m_sta_ext(create_dm_sta_ext())
-// {
-//     if (sta) {
-//         memcpy(&m_sta_info, sta, sizeof(em_sta_info_t));
-//     } else {
-//         memset(&m_sta_info, 0, sizeof(em_sta_info_t));
-//     }
-// }
-
-// dm_sta_t::dm_sta_t(const dm_sta_t& sta)
-//     : m_sta_ext(clone_dm_sta_ext(sta.m_sta_ext))
-// {
-//     memcpy(&m_sta_info, &sta.m_sta_info, sizeof(em_sta_info_t));
-// }
-
-// dm_sta_t::~dm_sta_t()
-// {
-//     destroy_dm_sta_ext(m_sta_ext);
-//     m_sta_ext = nullptr;
-// }
-
-// // WEAK DEFAULT IMPLEMENTATIONS
-// // Automatically used during public/standalone builds (returns nullptr safely)
-// __attribute__((weak)) dm_sta_ext_t* create_dm_sta_ext() { return nullptr; }
-// __attribute__((weak)) void destroy_dm_sta_ext(dm_sta_ext_t* ext) { (void)ext; }
-// __attribute__((weak)) dm_sta_ext_t* clone_dm_sta_ext(const dm_sta_ext_t* ext) { (void)ext; return nullptr; }
-
-
-
-// WEAK DEFAULT FACTORY:
-// Used in public/standalone builds. Returns nullptr safely so dm_sta_t 
-// functions normally when no private extension is present.
-__attribute__((weak)) dm_sta_ext_interface_t* create_dm_sta_ext() {
-    return nullptr;
-}
-
 dm_sta_t::dm_sta_t()
-    : m_sta_ext(create_dm_sta_ext())
 {
     memset(&m_sta_info, 0, sizeof(em_sta_info_t));
 }
 
 dm_sta_t::dm_sta_t(em_sta_info_t *sta)
-    : m_sta_ext(create_dm_sta_ext())
 {
     if (sta) {
         memcpy(&m_sta_info, sta, sizeof(em_sta_info_t));
@@ -625,15 +572,10 @@ dm_sta_t::dm_sta_t(em_sta_info_t *sta)
 }
 
 dm_sta_t::dm_sta_t(const dm_sta_t& sta)
-    : m_sta_ext(sta.m_sta_ext ? sta.m_sta_ext->clone() : nullptr)
 {
     memcpy(&m_sta_info, &sta.m_sta_info, sizeof(em_sta_info_t));
 }
 
 dm_sta_t::~dm_sta_t()
 {
-    // Safe! ~dm_sta_ext_interface_t() is virtual, so delete invokes 
-    // the true private destructor without needing dm_sta_ext.h included here.
-    delete m_sta_ext;
-    m_sta_ext = nullptr;
 }

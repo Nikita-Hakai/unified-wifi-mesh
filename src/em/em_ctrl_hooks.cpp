@@ -16,19 +16,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <string.h>
-#include "dm_sta.h"
-#include "dm_easy_mesh.h"
-#include "em_vendor.h"
-#include "lq_socket.h"
+#include "em_ctrl_hooks.h"
+#include <vector>
 
-class em_vendor_ctrl_t : public em_vendor_ext_interface_t {
-public:
-    int handle_vendor_tlv_ext(const unsigned char *tlv_value,
-                               unsigned int         tlv_len,
-                               dm_easy_mesh_t      *dm) override;
+static std::vector<em_bus_ready_fn_t> g_bus_ready_hooks;
 
-private:
-    void publish_wei_app(wei_data_t wei_data);
-    // static void wei_app_cb();
-};
+void em_register_bus_ready_hook(em_bus_ready_fn_t fn) { g_bus_ready_hooks.push_back(std::move(fn)); }
+void em_fire_bus_ready_hooks(bus_handle_t *h, wifi_bus_desc_t *d) {
+    for (auto &fn : g_bus_ready_hooks) fn(h, d);
+}
