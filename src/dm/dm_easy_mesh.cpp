@@ -110,14 +110,10 @@ dm_easy_mesh_t& dm_easy_mesh_t::operator = (dm_easy_mesh_t const& obj)
     }
 
     m_num_ap_mld = obj.m_num_ap_mld;
-    for (unsigned int i = 0; i < EM_MAX_AP_MLD; i++) {
-        m_ap_mld[i] = obj.m_ap_mld[i];
-    }
+    m_ap_mld = obj.m_ap_mld;
 
     m_num_assoc_sta_mld = obj.m_num_assoc_sta_mld;
-    for (unsigned int i = 0; i < EM_MAX_ASSOC_STA_MLD; i++) {
-        m_assoc_sta_mld[i] = obj.m_assoc_sta_mld[i];
-    }
+    m_assoc_sta_mld = obj.m_assoc_sta_mld;
 
     if (m_sta_map == NULL) {
         m_sta_map = hash_map_create();
@@ -3525,7 +3521,8 @@ void dm_easy_mesh_t::update_ap_mld_info(em_ap_mld_info_t *ap_mld_info)
             return;
         }
 
-        target_mld = &m_ap_mld[m_num_ap_mld].m_ap_mld_info;
+        m_ap_mld.emplace_back();
+        target_mld = &m_ap_mld.back().m_ap_mld_info;
         memset(target_mld, 0, sizeof(em_ap_mld_info_t));
         em_printfout("Created new MLD at index %d", m_num_ap_mld);
         m_num_ap_mld++;
@@ -3607,7 +3604,8 @@ void dm_easy_mesh_t::update_assoc_sta_mld_info(em_assoc_sta_mld_info_t *assoc_st
             return;
         }
 
-        target_mld = &m_assoc_sta_mld[m_num_assoc_sta_mld].m_assoc_sta_mld_info;
+        m_assoc_sta_mld.emplace_back();
+        target_mld = &m_assoc_sta_mld.back().m_assoc_sta_mld_info;
         memset(target_mld, 0, sizeof(em_assoc_sta_mld_info_t));
         m_num_assoc_sta_mld++;
     }
@@ -3675,9 +3673,8 @@ void dm_easy_mesh_t::remove_assoc_sta_mld_info(mac_address_t sta_mld_mac)
         m_assoc_sta_mld[i] = m_assoc_sta_mld[i + 1];
     }
 
-    // Zero out the vacated last slot and decrement count.
-    //memset(&m_assoc_sta_mld[m_num_assoc_sta_mld - 1], 0, sizeof(dm_assoc_sta_mld_t));
-    m_assoc_sta_mld[m_num_assoc_sta_mld - 1].init();
+    // Remove the vacated last entry and release its storage.
+    m_assoc_sta_mld.pop_back();
     m_num_assoc_sta_mld--;
 }
 
@@ -3732,6 +3729,7 @@ char *dm_easy_mesh_t::db_cfg_type_get_criteria(db_cfg_type_t cfg_type)
 int dm_easy_mesh_t::init()
 {
     unsigned int i;
+    m_num_ap_mld = 0;
     m_num_assoc_sta_mld = 0;
     m_network.init();
     m_device.init();
@@ -3745,9 +3743,8 @@ int dm_easy_mesh_t::init()
         m_network_ssid[i].init();
     }
 
-    for (i = 0; i < EM_MAX_ASSOC_STA_MLD; i++) {
-        m_assoc_sta_mld[i].init();
-    }
+    std::vector<dm_ap_mld_t>().swap(m_ap_mld);
+    std::vector<dm_assoc_sta_mld_t>().swap(m_assoc_sta_mld);
 
     m_policy_map = hash_map_create();
     m_scan_result_map = hash_map_create();
@@ -3787,9 +3784,8 @@ void dm_easy_mesh_t::reset()
     memset(&m_network.m_net_info, 0, sizeof(em_network_info_t));
     memset(&m_device.m_device_info, 0, sizeof(em_device_info_t));
     memset(&m_db_cfg_param, 0, sizeof(em_db_cfg_param_t));
-    for (unsigned int i = 0; i < EM_MAX_ASSOC_STA_MLD; i++) {
-        m_assoc_sta_mld[i].init();
-    }
+    std::vector<dm_ap_mld_t>().swap(m_ap_mld);
+    std::vector<dm_assoc_sta_mld_t>().swap(m_assoc_sta_mld);
 }
 
 dm_easy_mesh_t::dm_easy_mesh_t(const dm_network_t& net)

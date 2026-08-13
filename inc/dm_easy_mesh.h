@@ -85,14 +85,13 @@ public:
     em_t *m_em;
     bool    m_colocated;
     unsigned int    m_num_ap_mld;
-    dm_ap_mld_t     m_ap_mld[EM_MAX_AP_MLD];
+	std::vector<dm_ap_mld_t> m_ap_mld;
     bool    m_bsta_mld_present;
     dm_bsta_mld_t   m_bsta_mld;
     unsigned int    m_num_assoc_sta_mld;
-    dm_assoc_sta_mld_t m_assoc_sta_mld[EM_MAX_ASSOC_STA_MLD];
+	std::vector<dm_assoc_sta_mld_t> m_assoc_sta_mld;
     dm_tid_to_link_t m_tid_to_link;
     em_unassoc_sta_metrics_rsp_t    m_unassoc_sta_metrics_rsp;
-    em_unassoc_query_list_t m_unassoc_query_list;
 
     unsigned int m_num_unassoc_sta_metrics;
     em_unassoc_sta_metric_entry_t  m_unassoc_sta_metrics[EM_MAX_UNASSOC_STA];

@@ -2454,6 +2454,8 @@ static void em_agent_print_struct_sizes()
     em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_radio_t",       sizeof(dm_radio_t),        EM_MAX_BANDS,     sizeof(dm_radio_t)        * EM_MAX_BANDS);
     em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_radio_cap_t",   sizeof(dm_radio_cap_t),    EM_MAX_BANDS,     sizeof(dm_radio_cap_t)    * EM_MAX_BANDS);
     em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_network_ssid_t",sizeof(dm_network_ssid_t), EM_MAX_NET_SSIDS, sizeof(dm_network_ssid_t) * EM_MAX_NET_SSIDS);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_ap_mld_t",       sizeof(dm_ap_mld_t),       EM_MAX_AP_MLD,      sizeof(dm_ap_mld_t)       * EM_MAX_AP_MLD);
+    em_printfout("  %-20s %10zu x %-3d = %12zu\n", "dm_assoc_sta_mld_t",sizeof(dm_assoc_sta_mld_t), EM_MAX_ASSOC_STA_MLD, sizeof(dm_assoc_sta_mld_t) * EM_MAX_ASSOC_STA_MLD);
     em_printfout("  ---- underlying info structs ----\n");
     em_printfout("  %-30s %12zu\n", "em_bss_info_t",      sizeof(em_bss_info_t));
     em_printfout("  %-30s %12zu\n", "em_op_class_info_t", sizeof(em_op_class_info_t));
