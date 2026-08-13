@@ -48,7 +48,7 @@ unsigned int em_orch_t::submit_commands(em_cmd_t *pcmd[], unsigned int num)
     if (pcmd == NULL) {
         return 0;
     }
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
+
     for (i = 0; i < num && i < EM_MAX_CMD; i++) {
         // Skip unset slots (analyze_* may return fewer commands than num)
         if (pcmd[i] == NULL) {
@@ -147,7 +147,6 @@ bool em_orch_t::submit_command(em_cmd_t *pcmd)
         // if there are no candidates, complete the command
         destroy_command(pcmd);
     } else {
-	em_printfout("%s %d [DL] queue push\n", __func__, __LINE__);
         queue_push(m_pending, pcmd);
         push_stats(pcmd);
         submitted = true;
@@ -316,9 +315,9 @@ bool em_orch_t::orchestrate(em_cmd_t *pcmd, em_t *em)
     if (orch_state == em_orch_state_pending) {
         if (is_em_ready_for_orch_exec(pcmd, em) == true) {
             // ask em to execute the command
-            em_printfout("%s:%d: Start orchestartion:%s(%s), em state:%s\n", __func__, __LINE__, 
- 		em_cmd_t::get_orch_op_str(pcmd->get_orch_op()), em_cmd_t::get_cmd_type_str(pcmd->m_type), 
-			em_t::state_2_str(em->get_state()));
+            // em_printfout("%s:%d: Start orchestartion:%s(%s), em state:%s\n", __func__, __LINE__, 
+			// 		em_cmd_t::get_orch_op_str(pcmd->get_orch_op()), em_cmd_t::get_cmd_type_str(pcmd->m_type), 
+			// 		em_t::state_2_str(em->get_state()));
             em->orch_execute(pcmd);
         } else {
             // em_printfout("%s:%d: skipping orchestration:%s(%s) because of incorrect state, state:%s\n", __func__, __LINE__, 
@@ -549,8 +548,8 @@ void em_orch_t::handle_timeout()
     // go through active queue and check command states
     for (i = static_cast<int>(queue_count(m_active)) - 1; i >= 0; i--) {
         pcmd = static_cast<em_cmd_t *>(queue_peek(m_active, static_cast<unsigned int>(i)));
-	printf("%s:%d: Cmd: %s, em candidates: %d\n", __func__, __LINE__, 
-		em_cmd_t::get_cmd_type_str(pcmd->m_type), queue_count(pcmd->m_em_candidates));
+	//printf("%s:%d: Cmd: %s, em candidates: %d\n", __func__, __LINE__, 
+	//	em_cmd_t::get_cmd_type_str(pcmd->m_type), queue_count(pcmd->m_em_candidates));
 		//printf("%s:%d: Cmd: %s, em candidates: %d\n", __func__, __LINE__,
 					//em_cmd_t::get_cmd_type_str(pcmd->m_type), queue_count(pcmd->m_em_candidates));
         // ret must be evaluated per command; carrying it across commands lets one

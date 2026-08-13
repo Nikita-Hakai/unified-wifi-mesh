@@ -438,7 +438,7 @@ bool em_orch_ctrl_t::pre_process_orch_op(em_cmd_t *pcmd)
 	mac_address_t radio_mac, dev_mac;
 	em_2xlong_string_t criteria;
 
-    printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
+    //printf("%s:%d: Orchestration operation: %s\n", __func__, __LINE__, em_cmd_t::get_orch_op_str(pcmd->get_orch_op()));
     switch (pcmd->get_orch_op()) {
         case dm_orch_type_db_reset:
             dm_ctrl->reset_config();
