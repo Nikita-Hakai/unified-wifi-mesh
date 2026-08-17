@@ -186,6 +186,7 @@ void dm_device_t::encode(cJSON *obj, bool summary)
     dm_easy_mesh_t::macbytes_to_string(m_device_info.intf.mac, mac_str);
     cJSON_AddStringToObject(obj, "ID", mac_str);
 #ifdef EM_WEBSOCKET_PUSH
+    em_printfout("The manufacturer model for %s is %s\n", mac_str, m_device_info.manufacturer_model);
     char device_model[32] = {0};
     FILE *model_fp = popen("dmcli eRT getv Device.DeviceInfo.ModelName | grep "
                            "'value:' | awk -F'value: ' '{print $2}'",
