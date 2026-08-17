@@ -35,6 +35,8 @@
 #include "dm_easy_mesh_ctrl.h"
 #include "util.h"
 
+#define EM_WEBSOCKET_PUSH 1
+
 int dm_device_t::decode(const cJSON *obj, void *parent_id)
 {
     cJSON *tmp, *tmp_arr;
