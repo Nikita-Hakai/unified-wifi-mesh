@@ -187,22 +187,26 @@ void dm_device_t::encode(cJSON *obj, bool summary)
     cJSON_AddStringToObject(obj, "ID", mac_str);
 #ifdef EM_WEBSOCKET_PUSH
     em_printfout("The manufacturer model for %s is %s\n", mac_str, m_device_info.manufacturer_model);
-    char device_model[32] = {0};
-    FILE *model_fp = popen("dmcli eRT getv Device.DeviceInfo.ModelName | grep "
-                           "'value:' | awk -F'value: ' '{print $2}'",
-                           "r");
-    if (model_fp) {
-        if (fgets(device_model, sizeof(device_model), model_fp)) {
-            device_model[strcspn(device_model, "\r\n")] = '\0';
+    if (strlen(m_device_info.manufacturer_model) == 0) {
+        char device_model[32] = {0};
+        FILE *model_fp = popen("dmcli eRT getv Device.DeviceInfo.ModelName | grep "
+                               "'value:' | awk -F'value: ' '{print $2}'",
+                               "r");
+        if (model_fp) {
+            if (fgets(device_model, sizeof(device_model), model_fp)) {
+                device_model[strcspn(device_model, "\r\n")] = '\0';
+            }
+            pclose(model_fp);
         }
-        pclose(model_fp);
-    }
 
-    if (device_model[0] == '\0') {
-        snprintf(device_model, sizeof(device_model), "unknown");
+        if (device_model[0] == '\0') {
+            snprintf(device_model, sizeof(device_model), "unknown");
+        }
+        em_printfout("Device model is %s\n", device_model);
+        cJSON_AddStringToObject(obj, "deviceModel", device_model);
+    } else {
+        cJSON_AddStringToObject(obj, "deviceModel", m_device_info.manufacturer_model);
     }
-    em_printfout("Device model is %s\n", device_model);
-    cJSON_AddStringToObject(obj, "deviceModel", device_model);
 #endif
 
     bh_obj = cJSON_AddObjectToObject(obj, "Backhaul");
