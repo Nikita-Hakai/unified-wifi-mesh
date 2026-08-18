@@ -107,6 +107,43 @@ int dm_easy_mesh_agent_t::analyze_dev_init(em_bus_event_t *evt, em_cmd_t *pcmd[]
 	return num;
 }
 
+int get_client_type(char *sta_mac, char *sta_type)
+{
+    bus_handle_t g_handle;
+    int rc = bus_error_general;
+    raw_data_t bus_input_data, bus_output_data;
+
+    rc = bus_init(&g_handle);
+    if (rc != bus_error_success) {
+        em_printfout("[%s] Bus initialization failed with %d", __func__, rc);
+        return rc;
+    }
+
+    rc = get_bus_descriptor()->bus_open_fn(&g_handle, "WifiEM");
+    if (rc != bus_error_success) {
+        em_printfout("[%s] Failed to open bus with %d", __func__, rc);
+        return rc;
+    }
+
+    bus_input_data.data_type = bus_data_type_bytes;
+    bus_input_data.raw_data.bytes = (void *)sta_mac;
+    bus_input_data.raw_data_len = sizeof(sta_mac);
+    bus_output_data.data_type = bus_data_type_bytes;
+
+    rc = get_bus_descriptor()->bus_method_invoke_fn(&g_handle, NULL,
+        "Device.WiFi.EM.ClientType", &bus_input_data, &bus_output_data, BUS_METHOD_SET_GET);
+
+    if ((rc == bus_error_success) && (bus_output_data.raw_data_len != 0)) {
+        em_printfout("[%s] Bus success", __func__);
+        memcpy(sta_type, (char*)bus_output_data.raw_data.bytes, bus_output_data.raw_data_len);
+        get_bus_descriptor()->bus_data_free_fn(&bus_output_data);
+    }
+
+    get_bus_descriptor()->bus_close_fn(&g_handle);
+
+    return rc;
+}
+
 int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[])
 {
     unsigned int num = 0, i = 0, num_radios = 0;
@@ -159,7 +196,13 @@ int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[]
                 sta = static_cast<dm_sta_t *> (hash_map_get_next(dm.m_sta_assoc_map, sta));
                 continue;
             }
-
+            //Get the client type via rbus
+	    char sta_type[32] = {0};
+            int rc = get_client_type(sta_mac_str, sta_type);
+            if (rc == 0) {
+                memcpy(sta->m_sta_info.sta_client_type, sta_type, sizeof(sta->m_sta_info.sta_client_type));
+                em_printfout("Client type updated here as %s\n", sta->m_sta_info.sta_client_type);
+            }
             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.id, sta_mac_str);
             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.radiomac, radio_mac_str);
             is_tracked_sta_mld = false;
@@ -190,7 +233,6 @@ int dm_easy_mesh_agent_t::analyze_sta_list(em_bus_event_t *evt, em_cmd_t *pcmd[]
                 sta = static_cast<dm_sta_t *> (hash_map_get_next(dm.m_sta_dassoc_map, sta));
                 continue;
              }
-
             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.id, sta_mac_str);
             dm_easy_mesh_t::macbytes_to_string(sta->m_sta_info.radiomac, radio_mac_str);
             is_tracked_sta_mld = false;
