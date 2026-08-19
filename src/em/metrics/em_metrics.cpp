@@ -165,17 +165,7 @@ int em_metrics_t::handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff,
                      __func__, __LINE__, sta->m_sta_info.sta_client_type);
 
         if (first_client_type) {
-            em_t *em = dm->get_em();
-            if (em == NULL) {
-                em_printfout("%s:%d: Cannot send topology notification: EM is NULL",
-                             __func__, __LINE__);
-            } else if (static_cast<em_configuration_t *>(em)->
-                       send_topology_notification_by_client(
-                           sta->m_sta_info.id, sta->m_sta_info.bssid, true) < 0) {
-                em_printfout("%s:%d: Topology notification failed for STA %s",
-                             __func__, __LINE__,
-                             util::mac_to_string(sta->m_sta_info.id).c_str());
-            }
+            get_mgr()->publish_network_topology();
         }
     }
 
