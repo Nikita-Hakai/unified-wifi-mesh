@@ -134,10 +134,12 @@ void dm_easy_mesh_list_t::put_network(const char *key, const dm_network_t *net)
     em_network_info_t *net_info;
 
     net_info = &(const_cast<dm_network_t *> (net))->m_net_info;
+
     dm_easy_mesh_t::macbytes_to_string(net_info->ctrl_id.mac, mac_str);
 			
     /* try to find any data model with this network, if exists, the colocated dm must be there, otherwise create one */
     if ((dm = get_data_model(key, net_info->ctrl_id.mac)) == NULL) {
+        em_printfout("Creating data model for net_id:[%s] controller id mac:[%s]", key, mac_str);
 		dm = create_data_model(key, &net_info->ctrl_id, em_profile_type_3, true);
 		pnet = dm->get_network();
 		*pnet = *net;	
@@ -1628,12 +1630,11 @@ dm_easy_mesh_t *dm_easy_mesh_list_t::create_data_model(const char *net_id, const
     dm_easy_mesh_t::macbytes_to_string(const_cast<unsigned char *> (al_intf->mac), mac_str);
     snprintf(key, sizeof(em_short_string_t), "%s@%s", net_id, mac_str);
 
-
     dm = new dm_easy_mesh_t();
     dm->init();
 
     if (controller == true) {
-        em_printfout("Creating data model as controller ...");
+        em_printfout("Creating minimal data model entry for controller, net_id:[%s]", net_id);
         dm->set_controller(controller);
     } else {
         em_printfout("Creating data model as agent...");
@@ -1658,7 +1659,7 @@ dm_easy_mesh_t *dm_easy_mesh_list_t::create_data_model(const char *net_id, const
             }
         }
     }
-    em_printfout("Created data model for net_id: %s mac: %s, is_colocated:%d is_controller:%d", net_id, mac_str, colocated, controller);
+    em_printfout("Created data model for net_id:[%s], mac:[%s], is_colocated:%d is_controller:%d", net_id, mac_str, colocated, controller);
 
     dev = dm->get_device();
     memcpy(dev->m_device_info.intf.mac, al_intf->mac, sizeof(mac_address_t));
@@ -1666,7 +1667,7 @@ dm_easy_mesh_t *dm_easy_mesh_list_t::create_data_model(const char *net_id, const
 	if (controller == true) {
 		memcpy(dev->m_device_info.id.dev_mac, al_intf->mac, sizeof(mac_address_t));
 		dev->m_device_info.id.media = dm->m_network.m_net_info.media;
-		//TODO: Monitor Checks
+        //TODO: Monitor Checks
 		//memcpy(dev->m_device_info.backhaul_mac.mac, al_intf->mac, sizeof(mac_address_t));
 		dev->m_device_info.backhaul_mac.media = dm->m_network.m_net_info.media;
 		em_printfout("Backhaul mac updated to :%s device media:%d backhaul media:%d",
@@ -1675,6 +1676,7 @@ dm_easy_mesh_t *dm_easy_mesh_list_t::create_data_model(const char *net_id, const
 		//Update the easymesh configuration file to specify colocated agent as true.
 		dev->update_easymesh_json_cfg(true);
 	} else {
+        em_printfout("Initializing device for data model... with AL-mac: %s", util::mac_to_string(al_intf->mac).c_str());
         dm->set_id();
         em_printfout("dm->get_id():%d", dm->get_id());
     }

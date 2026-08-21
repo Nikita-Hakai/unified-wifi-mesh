@@ -2843,7 +2843,6 @@ int dm_easy_mesh_ctrl_t::analyze_reset(em_bus_event_t *evt, em_cmd_t *pcmd[])
 
     subdoc = &evt->u.subdoc;
 
-
     dm.decode_config(subdoc, "Reset");
     //dm.print_config();
 
@@ -4335,20 +4334,32 @@ int dm_easy_mesh_ctrl_t::get_wifi_reset_config(cJSON *parent, char *key)
 
     const char* platform = dm.get_platform();
 
-    // Prioritize the interface list depending on platform
+    unsigned int num_interfaces = 0;
     if ((intf = dm.get_prioritized_interface(platform)) == NULL) {
-        intf = dm.get_interface_by_index(0);//Todo: check why index 0 as it is taking brlan0
+        dm.get_interfaces_list(intf, &num_interfaces);
+        for (int i = 0; i < num_interfaces; i++) {
+            intf = dm.get_interface_by_index(i);
+            if (intf != NULL && memcmp(intf->mac, m_device_info.intf.mac, sizeof(intf->mac)) == 0) {
+                break;
+            }
+        }
     }
 
-    dm.set_ctrl_al_interface_mac(intf->mac);
+    /*
+     * Keep the controller ID tied to the AL-SAP MAC only.
+     * Do not overwrite it with the interface-derived MAC from config.
+     */
+    if (intf == NULL) {
+        em_printfout("%s:%d: No valid interface found", __func__, __LINE__);
+        return -1;
+    }
+    dm.set_ctrl_al_interface_mac(m_device_info.intf.mac);
     dm.set_ctrl_al_interface_name(intf->name);
-    dm.set_controller_id(intf->mac);//Should be set to eth0-virt-peer mac
     dm.set_controller_intf_media(intf->media);
 
     //dm.print_config();
 
     dm.encode_config(subdoc, "Reset");
-
 
     if ((obj = cJSON_Parse(subdoc->buff)) == NULL) {
         printf("%s:%d: Failed to load test file\n", __func__, __LINE__);
