@@ -794,34 +794,6 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
     return 0;
 }
 
-int em_metrics_t::handle_vendor_msg(unsigned char *buff, unsigned int len)
-{
-    em_tlv_t *tlv, *tlv_start;
-    size_t tmp_len, base_len;
-    char *errors[EM_MAX_TLV_MEMBERS] = {0};
-
-    if (em_msg_t(em_msg_type_topo_vendor, get_profile_type(), buff, len).validate(errors) == 0) {
-        printf("%s:%d: Vendor msg validation failed\n", __func__, __LINE__);
-        return -1;
-    }
-
-    tlv_start =  reinterpret_cast<em_tlv_t *> (buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
-    base_len = static_cast<size_t> (len) - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
-
-    tlv = tlv_start;
-    tmp_len = base_len;
-
-    while ((tlv->type != em_tlv_type_eom) && (tmp_len > 0)) {
-        if (tlv->type == em_tlv_type_vendor_specific) {
-            handle_link_stats_alarm_rprt_tlv(tlv->value, ntohs(tlv->len));
-        }
-        tmp_len -= (sizeof(em_tlv_t) + static_cast<size_t> (htons(tlv->len)));
-        tlv = reinterpret_cast<em_tlv_t *> (reinterpret_cast<unsigned char *> (tlv) + sizeof(em_tlv_t) + htons(tlv->len));
-    }
-
-    return 0;
-}
-
 int em_metrics_t::send_associated_sta_link_metrics_msg(mac_address_t sta_mac)
 {
     unsigned char buff[MAX_EM_BUFF_SZ];
@@ -2576,9 +2548,6 @@ void em_metrics_t::process_msg(unsigned char *data, unsigned int len)
 
         case em_msg_type_ap_metrics_rsp:
             handle_ap_metrics_response(data, len);
-            break;
-        case em_msg_type_topo_vendor:
-            handle_vendor_msg(data, len);
             break;
         case em_msg_type_unassoc_sta_link_metrics_query:
             handle_unassoc_sta_link_metrics_query(data, len);

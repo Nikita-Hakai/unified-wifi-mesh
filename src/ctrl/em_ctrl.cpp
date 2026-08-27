@@ -47,6 +47,7 @@
 #include "em_orch_ctrl.h"
 #include "util.h"
 #include "wifi_util.h"
+#include "em_ctrl_hooks.h"
 
 #ifdef AL_SAP
 #include "al_service_access_point.h"
@@ -1504,6 +1505,8 @@ void em_ctrl_t::start_complete()
         em_printfout("bus subscribe failed");
         return;
     }
+
+    em_fire_bus_ready_hooks(m_data_model.get_bus_hdl(), desc);
 }
 
 em_ctrl_t *em_ctrl_t::get_em_ctrl_instance()

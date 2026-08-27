@@ -144,6 +144,8 @@ int dm_sta_t::decode(const cJSON *obj, void *parent_id)
         snprintf(m_sta_info.cellular_data_pref, sizeof(m_sta_info.cellular_data_pref), "%s", cJSON_GetStringValue(tmp));
     }
 
+    // custom_decode_sta(this, obj);
+
     return 0;
 
 }
@@ -615,9 +617,18 @@ void dm_sta_t::decode_beacon_report(dm_sta_t *sta)
    }
 }
 
+dm_sta_t::dm_sta_t()
+{
+    memset(&m_sta_info, 0, sizeof(em_sta_info_t));
+}
+
 dm_sta_t::dm_sta_t(em_sta_info_t *sta)
 {
-    memcpy(&m_sta_info, sta, sizeof(em_sta_info_t));
+    if (sta) {
+        memcpy(&m_sta_info, sta, sizeof(em_sta_info_t));
+    } else {
+        memset(&m_sta_info, 0, sizeof(em_sta_info_t));
+    }
 }
 
 dm_sta_t::dm_sta_t(const dm_sta_t& sta)
@@ -625,12 +636,6 @@ dm_sta_t::dm_sta_t(const dm_sta_t& sta)
     memcpy(&m_sta_info, &sta.m_sta_info, sizeof(em_sta_info_t));
 }
 
-dm_sta_t::dm_sta_t()
-{
-    memset(&m_sta_info, 0, sizeof(em_sta_info_t));
-}
-
 dm_sta_t::~dm_sta_t()
 {
-
 }

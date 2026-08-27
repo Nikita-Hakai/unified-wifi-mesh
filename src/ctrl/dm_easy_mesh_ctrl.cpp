@@ -2693,7 +2693,7 @@ int dm_easy_mesh_ctrl_t::analyze_sta_assoc_event(em_bus_event_t *evt, em_cmd_t *
     strncpy(evt->params.u.args.args[3], (params->assoc.assoc_event == 1)?"Assoc":"Disassoc", len);
     pdm = get_data_model(GLOBAL_NET_ID, params->dev);
     if (pdm == NULL) {
-        printf("%s:%d: Could not find data model for dev: %s\n", __func__, __LINE__, dev_mac_str);
+        em_printfout("Could not find data model for dev: %s", dev_mac_str);
         return -1;
     }
 
@@ -2715,8 +2715,8 @@ int dm_easy_mesh_ctrl_t::analyze_sta_assoc_event(em_bus_event_t *evt, em_cmd_t *
 
             // confirm that the radio is on this device
             for (i = 0; i < pdm->m_num_radios; i++) {
-                    if (memcmp(pbss->m_bss_info.ruid.mac, pdm->m_radio[i].m_radio_info.intf.mac,
-                           sizeof(mac_address_t)) == 0) {
+                if (memcmp(pbss->m_bss_info.ruid.mac, pdm->m_radio[i].m_radio_info.intf.mac,
+                        sizeof(mac_address_t)) == 0) {
                     radio_matched = true;
                     break;
                 }

@@ -59,6 +59,7 @@ onewifi_em_agent_SOURCES =  \
      $(top_srcdir)/src/em/channel/em_channel.cpp  \
      $(top_srcdir)/src/em/capability/em_capability.cpp \
      $(top_srcdir)/src/em/metrics/em_metrics.cpp \
+     $(top_srcdir)/src/em/em_vendor.cpp \
      $(top_srcdir)/src/em/steering/em_steering.cpp \
      $(top_srcdir)/src/em/policy_cfg/em_policy_cfg.cpp \
      $(top_srcdir)/src/em/crypto/em_crypto.cpp \
@@ -99,6 +100,7 @@ onewifi_em_agent_SOURCES =  \
      $(top_srcdir)/src/cmd/em_cmd_beacon_report.cpp \
      $(top_srcdir)/src/cmd/em_cmd_ap_metrics_report.cpp \
      $(top_srcdir)/src/cmd/em_cmd_link_stats_report.cpp \
+     $(top_srcdir)/src/cmd/em_cmd_generic.cpp \
      $(top_srcdir)/src/cmd/em_cmd_unassoc_sta_result.cpp \
      $(top_srcdir)/src/agent/dm_easy_mesh_agent.cpp \
      $(top_srcdir)/src/agent/em_agent.cpp \

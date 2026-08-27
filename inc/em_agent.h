@@ -299,9 +299,8 @@ class em_agent_t : public em_mgr_t {
 
 	void handle_link_stats_report(em_bus_event_t *evt);
 
-       /**!
-        * @brief Handles an Unassociated STA Link Metrics Query event.
-        *
+        void handle_wei_app_data(em_bus_event_t *evt);
+        /**!
         * This function processes the Unassociated STA Link Metrics Query
         * received from the controller, parses the requested operating
         * classes, channels and STA MAC addresses, and triggers the
@@ -1097,7 +1096,7 @@ public:
 	 * @note Ensure that the data pointer is valid before accessing its contents.
 	 */
 	static int report_cb(char *event_name, bus_data_prop_t *data, void *userData);
-
+   static int wei_data_cb(char *event_name, bus_data_prop_t *data, void *userData);
 	/**!
 	 * @brief Retrieves the associated data for the given input.
 	 *
