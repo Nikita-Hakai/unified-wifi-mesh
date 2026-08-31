@@ -89,8 +89,10 @@ jobs:
                                 libjson-c-dev
 
         # Steps for ucode installation required for hostapd compilation
+        # Pinned to commit used by the local OpenWrt build (2025.07.18)
         git clone https://github.com/jow-/ucode.git ucode
         cd ucode
+        git checkout 3f64c808
         mkdir build && cd build
         cmake -DUBUS_SUPPORT=OFF -DUCI_SUPPORT=OFF -DULOOP_SUPPORT=OFF ..
         make -j$(nproc)
