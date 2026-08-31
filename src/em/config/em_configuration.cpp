@@ -3870,7 +3870,6 @@ int em_configuration_t::create_autoconfig_wsc_m2_msg(unsigned char *buff, unsign
     dm_radio_t *radio;
 
     radio = get_radio_from_dm();
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
     // first compute keys
     if (compute_keys(get_e_public(), static_cast<short unsigned int> (get_e_public_len()), get_r_private(), static_cast<short unsigned int> (get_r_private_len())) != 1) {
         printf("%s:%d: Keys computation failed\n", __func__, __LINE__);
@@ -4339,7 +4338,6 @@ int em_configuration_t::handle_wsc_m1(unsigned char *buff, unsigned int len)
     em_freq_band_t  band;
     dm_radio_t *radio;
     unsigned int found = 0, i  = 0;
-em_printfout("%s %d [DL]\n", __func__, __LINE__);
 	dm = get_data_model();
 	memset(&dev_info, 0, sizeof(em_device_info_t));
 
@@ -5788,7 +5786,6 @@ int em_configuration_t::handle_autoconfig_wsc_m1(unsigned char *buff, unsigned i
     tlv_len = len - static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
     em_cmdu_t *cmdu = reinterpret_cast<em_cmdu_t *> (buff + sizeof(em_raw_hdr_t));
 
-    em_printfout("%s %d [DL] tlv-type:%d\n", __func__, __LINE__, tlv->type);
     while ((tlv->type != em_tlv_type_eom) && (len > 0)) {
         if (tlv->type == em_tlv_type_ap_radio_basic_cap) {
             handle_ap_radio_basic_cap(tlv->value, htons(tlv->len));
@@ -5803,7 +5800,6 @@ int em_configuration_t::handle_autoconfig_wsc_m1(unsigned char *buff, unsigned i
         tlv = reinterpret_cast<em_tlv_t *> (reinterpret_cast<unsigned char *> (tlv) + sizeof(em_tlv_t) + htons(tlv->len));
     }
 
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
     int ret = create_autoconfig_wsc_m2_msg(msg, ntohs(cmdu->id));
     if (ret <= 0) {
         return -1;
@@ -5815,7 +5811,6 @@ int em_configuration_t::handle_autoconfig_wsc_m1(unsigned char *buff, unsigned i
 
         return -1;
     }
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
 
     if (send_frame(msg, sz)  < 0) {
         em_printfout("autoconfig wsc m2 send failed, error:%d", errno);
@@ -5918,7 +5913,6 @@ int em_configuration_t::handle_autoconfig_resp(unsigned char *buff, unsigned int
     }
 
     if (access("/tmp/agent_m1_delay", F_OK) == 0) {
-	    em_printfout("[DL]Delay file found. Sleeping for 200 ms...\n");
 	    usleep(200000);   // 200000 microseconds = 200 ms
     }
 
@@ -6046,7 +6040,6 @@ void em_configuration_t::process_msg(unsigned char *data, unsigned int len)
     unsigned char *tlvs;
     unsigned int tlvs_len;
 
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
     em_cmdu_t *cmdu = reinterpret_cast<em_cmdu_t *>(data + sizeof(em_raw_hdr_t));
             
     tlvs = data + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t);
@@ -6055,7 +6048,6 @@ void em_configuration_t::process_msg(unsigned char *data, unsigned int len)
     em_raw_hdr_t *hdr = reinterpret_cast<em_raw_hdr_t *>(data);
     uint8_t *src_al_mac = hdr->src;
 
-    em_printfout("%s %d [DL] cmd-type : %d\n", __func__, __LINE__, htons(cmdu->type));
     switch (htons(cmdu->type)) {
         case em_msg_type_autoconf_search:
             if (get_service_type() == em_service_type_ctrl) {
@@ -6376,7 +6368,6 @@ void em_configuration_t::process_ctrl_state()
 {
     dm_easy_mesh_t *dm = get_data_model();
 
-    em_printfout("%s %d [DL] state : %d\n", __func__, __LINE__, get_state());
     switch (get_state()) {
         case em_state_ctrl_misconfigured:
             send_autoconfig_renew_msg();

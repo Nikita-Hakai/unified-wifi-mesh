@@ -48,7 +48,6 @@ unsigned int em_orch_t::submit_commands(em_cmd_t *pcmd[], unsigned int num)
     if (pcmd == NULL) {
         return 0;
     }
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
     for (i = 0; i < num && i < EM_MAX_CMD; i++) {
         // Skip unset slots (analyze_* may return fewer commands than num)
         if (pcmd[i] == NULL) {
@@ -147,7 +146,6 @@ bool em_orch_t::submit_command(em_cmd_t *pcmd)
         // if there are no candidates, complete the command
         destroy_command(pcmd);
     } else {
-	em_printfout("%s %d [DL] queue push\n", __func__, __LINE__);
         queue_push(m_pending, pcmd);
         push_stats(pcmd);
         submitted = true;

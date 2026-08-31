@@ -386,7 +386,6 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
 	pthread_mutex_lock(&m_mgr->m_mutex);
     em = static_cast<em_t *> (hash_map_get_first(m_mgr->m_em_map));
     while (em != NULL) {
-        em_printfout("%s %d [DL] cmd-type:%d\n", __func__, __LINE__, pcmd->m_type);
 	switch (pcmd->m_type) {
             case em_cmd_type_dev_init:
                 radio = pcmd->m_data_model.get_radio(ctx->arr_index);

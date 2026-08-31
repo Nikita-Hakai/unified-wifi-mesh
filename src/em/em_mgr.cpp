@@ -56,7 +56,6 @@ void em_mgr_t::io_process(em_bus_event_type_t type, char *data, unsigned int len
 {
     em_event_t *evt;
     em_bus_event_t *bevt;
-   em_printfout("%s %d [DL]\n", __func__, __LINE__);
     evt = static_cast<em_event_t *>(malloc(sizeof(em_event_t) + EM_MAX_EVENT_DATA_LEN));
     evt->type = em_event_type_bus;
     bevt = &evt->u.bevt;
@@ -71,7 +70,6 @@ void em_mgr_t::io_process(em_bus_event_type_t type, char *data, unsigned int len
 		memcpy(&bevt->params, params, sizeof(em_cmd_params_t));
 	}
 
-    em_printfout("%s %d [DL] pushed to queue\n", __func__, __LINE__);
     push_to_queue(evt);
 }
 
@@ -156,7 +154,6 @@ void em_mgr_t::proto_process(unsigned char *data, unsigned int len, em_t *al_em)
 
     memcpy(evt->u.fevt.frame, data, len);
     evt->u.fevt.frame_len = len;
-    em_printfout("%s %d [DL] pushing the frames to queue\n", __func__, __LINE__);
     em->push_to_queue(evt);
 }
 
@@ -711,12 +708,10 @@ int em_mgr_t::start()
                 if (evt == NULL) {
                     continue;
                 }
-                em_printfout("%s %d [DL] event-type:%d\n", __func__, __LINE__, evt->type);
 		pthread_mutex_unlock(&m_queue.lock);
                 if (((evt->type == em_event_type_bus) && ((evt->u.bevt.type == em_bus_event_type_reset) ||
                       (evt->u.bevt.type == em_bus_event_type_get_reset))) ||
 						(is_data_model_initialized() == true)) {
-		   em_printfout("%s %d [DL]\n", __func__, __LINE__);
                     handle_event(evt);
                 } else if (evt->type == em_event_type_nb) {
                     handle_event(evt);

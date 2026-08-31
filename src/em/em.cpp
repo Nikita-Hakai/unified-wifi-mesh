@@ -648,9 +648,7 @@ void em_t::proto_run()
                     continue;
                 }
                 pthread_mutex_unlock(&m_iq.lock);
-                em_printfout("%s %d [DL] pop from queue\n", __func__, __LINE__);
 		if (evt->type == em_event_type_frame) {
-		   em_printfout("%s %d [DL]\n", __func__, __LINE__);
                     proto_process(evt->u.fevt.frame, evt->u.fevt.frame_len);
                 } else if (evt->type == em_event_type_cmd){
                     // em_cmd_event_t cevnt;

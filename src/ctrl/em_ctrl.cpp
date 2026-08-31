@@ -260,9 +260,7 @@ void em_ctrl_t::handle_m2_tx(em_bus_event_t *evt)
 {
     em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
     int num;
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);    
     if ((num = m_data_model.analyze_m2_tx(evt, pcmd)) > 0) {
-	em_printfout("%s %d [DL] num : %d\n", __func__, __LINE__, num);
         m_orch->submit_commands(pcmd, static_cast<unsigned int> (num));
     }
 }
@@ -702,7 +700,6 @@ void em_ctrl_t::handle_nb_event(em_nb_event_t *evt)
 
 void em_ctrl_t::handle_bus_event(em_bus_event_t *evt)
 {
-   em_printfout("%s %d [DL] evt-type:%d\n", __func__, __LINE__, evt->type);
     switch (evt->type) {
         case em_bus_event_type_reset:
             handle_reset(evt);
@@ -813,7 +810,6 @@ void em_ctrl_t::handle_bus_event(em_bus_event_t *evt)
 
 void em_ctrl_t::handle_event(em_event_t *evt)
 {
-    em_printfout("%s %d [DL] event-type:%d\n", __func__, __LINE__, evt->type);
     switch(evt->type) {
         case em_event_type_bus:
             handle_bus_event(&evt->u.bevt);

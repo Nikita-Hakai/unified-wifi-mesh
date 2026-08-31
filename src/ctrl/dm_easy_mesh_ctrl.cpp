@@ -2783,7 +2783,6 @@ int dm_easy_mesh_ctrl_t::analyze_m2_tx(em_bus_event_t *evt, em_cmd_t *pcmd[])
         return -1;
     }
 
-    em_printfout("%s %d [DL]\n", __func__, __LINE__);
     params = reinterpret_cast<em_bus_event_type_m2_tx_params_t *> (evt->u.raw_buff);
     dm_easy_mesh_t::macbytes_to_string(params->al, al_str);
     dm_easy_mesh_t::macbytes_to_string(params->radio, radio_str);
