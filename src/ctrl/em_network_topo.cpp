@@ -48,8 +48,15 @@ void em_network_topo_t::encode(cJSON *parent)
 	for (i = 0; i < m_data_model->m_num_radios; i++) {
 		radio_obj = cJSON_CreateObject();
 		m_data_model->m_radio[i].encode(radio_obj, em_get_radio_list_reason_radio_summary);
+		em_printfout("Radio[%d] intf.mac: %s id.ruid: %s", i,
+			util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str(),
+			util::mac_to_string(m_data_model->m_radio[i].m_radio_info.id.ruid).c_str());
+		em_printfout("DEBUG: Total operating classes in data model: %d", m_data_model->m_num_opclass);
 		for (j = 0; j < m_data_model->m_num_opclass; j++){
 			em_op_class_info_t *op_class_info = &m_data_model->m_op_class[j].m_op_class_info;
+			em_printfout("DEBUG: OpClass[%d] ruid: %s type: %d op_class: %d channel: %d", j,
+				util::mac_to_string(op_class_info->id.ruid).c_str(),
+				op_class_info->id.type, op_class_info->op_class, op_class_info->channel);
 			if ((memcmp(op_class_info->id.ruid, m_data_model->m_radio[i].get_radio_interface_mac(), sizeof(mac_address_t)) == 0) &&
 				(op_class_info->id.type == em_op_class_type_current)) {
 				cJSON_AddNumberToObject(radio_obj, "Class", op_class_info->op_class);
@@ -58,6 +65,10 @@ void em_network_topo_t::encode(cJSON *parent)
 					util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str(),
 					op_class_info->op_class, op_class_info->channel);
 			}
+		}
+		if (j == m_data_model->m_num_opclass) {
+			em_printfout("WARNING: No current operating class found for Radio[%d] %s", i,
+				util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str());
 		}
 		cJSON_AddItemToArray(radio_list_obj, radio_obj);
 		bss_list_obj = cJSON_AddArrayToObject(radio_obj, "BSSList");

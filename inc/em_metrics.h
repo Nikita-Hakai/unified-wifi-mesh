@@ -236,6 +236,8 @@ class em_metrics_t {
 	 *
 	 * @param[in] buff Pointer to the buffer containing the TLV data.
 	 * @param[in] len Length of the data in the buffer.
+	 * @param[in] notify_topology Send a topology notification when this TLV
+	 *            provides the client's type for the first time.
 	 *
 	 * @returns int Status code indicating success or failure.
 	 * @retval 0 on success.
@@ -243,7 +245,8 @@ class em_metrics_t {
 	 *
 	 * @note Ensure that the buffer is properly allocated and contains valid TLV data.
 	 */
-	int handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff, unsigned int len);
+	int handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff, unsigned int len,
+		bool notify_topology = false);
     
 	/**!
 	 * @brief Handles the beacon metrics query.
@@ -318,7 +321,31 @@ class em_metrics_t {
 	 *
 	 * @note Ensure that the buffer is properly allocated.
 	 */
-	int handle_ap_metrics_tlv(unsigned char *buff, bssid_t bssid);
+	int handle_ap_metrics_tlv(unsigned char *buff, unsigned int tlv_len, bssid_t bssid);
+
+	/**!
+	 * @brief Handles the AP Extended Metrics tlv.
+	 *
+	 * This function stores the unicast/multicast/broadcast byte counters into the BSS.
+	 *
+	 * @param[in] buff Pointer to the buffer containing AP extended metrics.
+	 * @param[in] tlv_len Length of the TLV value.
+	 *
+	 * @returns int Status code indicating success or failure.
+	 */
+	int handle_ap_ext_metrics_tlv(unsigned char *buff, unsigned int tlv_len);
+
+	/**!
+	 * @brief Handles the Radio Metrics tlv.
+	 *
+	 * This function stores the radio noise and transmit/receive metrics into the radio.
+	 *
+	 * @param[in] buff Pointer to the buffer containing radio metrics.
+	 * @param[in] tlv_len Length of the TLV value.
+	 *
+	 * @returns int Status code indicating success or failure.
+	 */
+	int handle_radio_metrics_tlv(unsigned char *buff, unsigned int tlv_len);
 
 	int handle_link_stats_alarm_rprt_tlv(unsigned char *buff, size_t len);
 
@@ -432,6 +459,7 @@ class em_metrics_t {
 	int send_ap_metrics_response();
 
 	int send_link_quality_report();
+
 	/**!
 	 * @brief Creates a beacon metrics response TLV.
 	 *

@@ -56,7 +56,6 @@ void em_mgr_t::io_process(em_bus_event_type_t type, char *data, unsigned int len
 {
     em_event_t *evt;
     em_bus_event_t *bevt;
-
     evt = static_cast<em_event_t *>(malloc(sizeof(em_event_t) + EM_MAX_EVENT_DATA_LEN));
     evt->type = em_event_type_bus;
     bevt = &evt->u.bevt;
@@ -133,15 +132,26 @@ void em_mgr_t::proto_process(unsigned char *data, unsigned int len, em_t *al_em)
     em_event_t	*evt;
     em_t *em = NULL;
 
-	em = find_em_for_msg_type(data, len, al_em);
-	if (em == NULL) {
-		em_printfout("%s %d EM null\n", __func__, __LINE__);
-		return;
-	}
+    em = find_em_for_msg_type(data, len, al_em);
+    if (em == NULL) {
+        em_printfout("Error: find_em_for_msg_type failed");
+        return;
+    }
 
     evt = static_cast<em_event_t *>(malloc(sizeof(em_event_t)));
+    if (evt == NULL) {
+        em_printfout("Error: malloc failed for em_event_t structure");
+        return;
+    }
+
     evt->type = em_event_type_frame;
     evt->u.fevt.frame = static_cast<unsigned char *>(malloc(len));
+    if (evt->u.fevt.frame == NULL) {
+        em_printfout("Error: malloc failed for frame buffer (requested size=%u)", len);
+        free(evt);
+        return;
+    }
+
     memcpy(evt->u.fevt.frame, data, len);
     evt->u.fevt.frame_len = len;
     em->push_to_queue(evt);
@@ -585,7 +595,7 @@ void em_mgr_t::nodes_listener()
                         proto_process(buff, static_cast<unsigned int>(len), em);
                     }
                 }
-#endif
+#endif //AL_SAP not defined.
             }
             em = static_cast<em_t *>(hash_map_get_next(m_em_map, em));
         }
@@ -698,11 +708,10 @@ int em_mgr_t::start()
                 if (evt == NULL) {
                     continue;
                 }
-                pthread_mutex_unlock(&m_queue.lock);
+		pthread_mutex_unlock(&m_queue.lock);
                 if (((evt->type == em_event_type_bus) && ((evt->u.bevt.type == em_bus_event_type_reset) ||
                       (evt->u.bevt.type == em_bus_event_type_get_reset))) ||
 						(is_data_model_initialized() == true)) {
-
                     handle_event(evt);
                 } else if (evt->type == em_event_type_nb) {
                     handle_event(evt);

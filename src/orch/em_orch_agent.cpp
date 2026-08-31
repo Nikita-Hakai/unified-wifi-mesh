@@ -386,7 +386,7 @@ unsigned int em_orch_agent_t::build_candidates(em_cmd_t *pcmd)
 	pthread_mutex_lock(&m_mgr->m_mutex);
     em = static_cast<em_t *> (hash_map_get_first(m_mgr->m_em_map));
     while (em != NULL) {
-        switch (pcmd->m_type) {
+	switch (pcmd->m_type) {
             case em_cmd_type_dev_init:
                 radio = pcmd->m_data_model.get_radio(ctx->arr_index);
                 dm_easy_mesh_t::macbytes_to_string(radio->get_radio_interface_mac(), src_mac_str);

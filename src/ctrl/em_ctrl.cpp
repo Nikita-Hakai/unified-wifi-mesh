@@ -35,6 +35,7 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <cjson/cJSON.h>
@@ -51,1084 +52,6 @@
 #ifdef AL_SAP
 #include "al_service_access_point.h"
 #endif
-
-#define EM_WEBSOCKET_PUSH 1
-
-#ifdef EM_WEBSOCKET_PUSH
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/rand.h>
-#include <netdb.h>
-#include <time.h>
-#include <signal.h>
-#include <stdint.h>
-
-/* ================================================================
- * EasyMesh topology streaming over VB-SB WebSocket (wss://)
- * ================================================================ */
-
-#define EM_TOPO_STREAM_URL_SIZE    4096
-#define EM_TOPO_STREAM_TOKEN_KEY   "token="
-#define EM_TOPO_STREAM_SAT_URL     "https://devprimary.vbautobot.comcast.com:6002/get_sat"
-#define EM_TOPO_STREAM_TOKEN_SIZE  4096
-#define EM_TOPO_GATEWAY_MAC_SIZE   18
-#define EM_TOPO_SSL_KEYLOG_FILE    "/tmp/em_topo_ssl_keys.log"
-
-/* After each DataFrame send, read (and validate) the server's WebSocket
- * response, transparently answering ping frames with pong (RFC 6455 §5.5).
- */
-#define EM_TOPO_WAIT_WS_RESPONSE   1
-
-/* Default base URL — SAT token is appended as ?token=<JWT> after fetch */
-static char g_em_topo_stream_url[EM_TOPO_STREAM_URL_SIZE] =
-    "wss://vb-streamer-api.vb.comcast.com:6100/ws/topology/xb";
-
-static int                g_em_topo_socket_fd     = -1;
-static SSL_CTX           *g_em_topo_ssl_ctx       = NULL;
-static SSL               *g_em_topo_ssl           = NULL;
-static unsigned long long g_em_topo_order_id      = 0;
-static char              g_em_topo_gateway_mac[EM_TOPO_GATEWAY_MAC_SIZE] = {0};
-
-/* Ping-listener thread state */
-static pthread_mutex_t    g_em_topo_sock_mtx      = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t          g_em_topo_ping_tid       = 0;
-static volatile int       g_em_topo_listen_stop    = 0;
-/* Set to 1 only after the full WebSocket upgrade (101) succeeds.
- * The ping-listener must not touch the fd before this point or it will
- * race with the TLS handshake / HTTP upgrade and corrupt them. */
-static volatile int       g_em_topo_ws_ready       = 0;
-
-/* Forward declaration — defined later; called from the ping-listener thread
- * on CLOSE frame receipt to tear down the fd before the loop re-checks. */
-static void em_topo_close(void);
-
-typedef struct {
-    bool     use_tls;
-    char     host[128];
-    uint16_t port;
-    char     path_query[1024];
-} em_topo_url_info_t;
-
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-/* SSL key log callback <E2><80><94> writes NSS Key Log format lines readable by Wireshark.
- *
- * Covers ALL cipher suites automatically:
- *   - RSA key exchange   -> CLIENT_RANDOM <client_random> <master_secret>
- *   - DHE/ECDHE (TLS1.2) -> CLIENT_RANDOM <client_random> <master_secret>
- *   - TLS 1.3 (ECDHE)    -> CLIENT_HANDSHAKE_TRAFFIC_SECRET / SERVER_HANDSHAKE_TRAFFIC_SECRET
- *                           CLIENT_TRAFFIC_SECRET_0 / SERVER_TRAFFIC_SECRET_0
- *
- * To decrypt in Wireshark:
- *   Edit > Preferences > Protocols > TLS > (Pre)-Master-Secret log filename
- *   -> /tmp/em_topo_ssl_keys.log
- */
-static void em_topo_ssl_keylog_cb(const SSL *ssl, const char *line)
-{
-    (void)ssl;
-    FILE *fp = fopen(EM_TOPO_SSL_KEYLOG_FILE, "a");
-    if (fp == NULL) {
-        em_printfout("[TOPO-WS] keylog: fopen(%s) failed: %s",
-            EM_TOPO_SSL_KEYLOG_FILE, strerror(errno));
-        return;
-    }
-    fprintf(fp, "%s\n", line);
-    fflush(fp);
-    fclose(fp);
-    em_printfout("[TOPO-WS] keylog: %s", line);
-}
-#endif /* OPENSSL_VERSION_NUMBER >= 0x10101000L */
-
-/* --- URL parsing (same logic as parse_csi_stream_url in websocket.c) --- */
-static bool em_topo_parse_url(em_topo_url_info_t *info)
-{
-    const char *url       = g_em_topo_stream_url;
-    const char *scheme    = strstr(url, "://");
-    const char *host_start, *host_end, *path_start;
-    long parsed_port = 6100;
-
-    if (!info) return false;
-    memset(info, 0, sizeof(*info));
-
-    if (scheme) {
-        info->use_tls = ((size_t)(scheme - url) == 3 && strncmp(url, "wss", 3) == 0);
-        host_start = scheme + 3;
-    } else {
-        info->use_tls  = true;
-        host_start = url;
-    }
-
-    host_end = host_start;
-    while (*host_end && *host_end != ':' && *host_end != '/' && *host_end != '?')
-        host_end++;
-
-    {
-        size_t hlen = (size_t)(host_end - host_start);
-        if (hlen > 0 && hlen < sizeof(info->host)) {
-            memcpy(info->host, host_start, hlen);
-            info->host[hlen] = '\0';
-        }
-    }
-
-    if (*host_end == ':') {
-        char *ep = NULL;
-        long p = strtol(host_end + 1, &ep, 10);
-        if (ep != host_end + 1 && p > 0 && p <= 65535) parsed_port = p;
-    }
-    info->port = (uint16_t)parsed_port;
-
-    path_start = host_end;
-    if (*path_start == ':')
-        while (*path_start && *path_start != '/' && *path_start != '?')
-            path_start++;
-    snprintf(info->path_query, sizeof(info->path_query), "%s",
-        *path_start ? path_start : "/");
-    return (info->host[0] != '\0');
-}
-
-static int em_topo_build_url_with_token(const char *token)
-{
-    char updated[EM_TOPO_STREAM_URL_SIZE] = {0};
-    const char *cur = g_em_topo_stream_url;
-    const char *tp  = strstr(cur, EM_TOPO_STREAM_TOKEN_KEY);
-    int written;
-
-    if (!token || !token[0]) return -1;
-    if (tp) {
-        size_t prefix_len = (size_t)(tp - cur) + strlen(EM_TOPO_STREAM_TOKEN_KEY);
-        const char *suffix = strchr(tp, '&');
-        written = snprintf(updated, sizeof(updated), "%.*s%s%s",
-            (int)prefix_len, cur, token, suffix ? suffix : "");
-    } else {
-        const char *sep = strchr(cur, '?') ? "&" : "?";
-        written = snprintf(updated, sizeof(updated), "%s%s%s%s",
-            cur, sep, EM_TOPO_STREAM_TOKEN_KEY, token);
-    }
-    if (written <= 0 || (size_t)written >= sizeof(updated)) return -1;
-    snprintf(g_em_topo_stream_url, sizeof(g_em_topo_stream_url), "%s", updated);
-    return 0;
-}
-
-/* --- SAT token fetch via MTLS (same pattern as fetch_latest_csi_stream_token) --- */
-static int em_topo_fetch_sat_token(char *token_out, size_t token_out_len)
-{
-    static char password[256] = {0};
-    char curl_cmd[1024] = {0};
-    char curl_output[EM_TOPO_STREAM_TOKEN_SIZE] = {0};
-    int  curl_exit_code = -1;
-    FILE *fp = NULL;
-    char line_buf[256] = {0};
-    size_t used = 0;
-
-    if (token_out == NULL || token_out_len == 0) {
-        em_printfout("[TOPO-WS] em_topo_fetch_sat_token: invalid args (token_out=%p len=%zu)", token_out, token_out_len);
-        return -1;
-    }
-
-    if (!password[0]) {
-        em_printfout("[TOPO-WS] No cached password, running GetConfigFile /tmp/.cfgDynamicSExpki");
-        if (system("GetConfigFile /tmp/.cfgDynamicSExpki") != 0) {
-            em_printfout("[TOPO-WS] GetConfigFile failed");
-            return -1;
-        }
-        em_printfout("[TOPO-WS] GetConfigFile OK, reading password");
-        fp = popen("cat /tmp/.cfgDynamicSExpki", "r");
-        if (fp == NULL) {
-            em_printfout("[TOPO-WS] popen(cat /tmp/.cfgDynamicSExpki) failed");
-            return -1;
-        }
-        if (!fgets(password, sizeof(password), fp)) {
-            em_printfout("[TOPO-WS] fgets password failed");
-            pclose(fp);
-            return -1;
-        }
-        pclose(fp); fp = NULL;
-        password[strcspn(password, "\r\n")] = '\0';
-        em_printfout("[TOPO-WS] Password read OK (len=%zu)", strlen(password));
-    } else {
-        em_printfout("[TOPO-WS] Using cached password (len=%zu)", strlen(password));
-    }
-
-    for (int attempt = 0; attempt < 2; attempt++) {
-        int status;
-        const char *cert = "/nvram/certs/devicecert_2.pk12";
-        snprintf(curl_cmd, sizeof(curl_cmd),
-            "curl -s --cert-type P12 --cert %s:%s %s",
-            cert, password, EM_TOPO_STREAM_SAT_URL);
-
-        em_printfout("[TOPO-WS] SAT attempt %d: running curl for %s", attempt + 1, EM_TOPO_STREAM_SAT_URL);
-        fp = popen(curl_cmd, "r");
-        if (fp == NULL) {
-            em_printfout("[TOPO-WS] popen(curl) failed: %s", strerror(errno));
-            return -1;
-        }
-        used = 0;
-        while (fgets(line_buf, sizeof(line_buf), fp)) {
-            size_t ll = strlen(line_buf);
-            if (used + ll >= sizeof(curl_output) - 1) break;
-            memcpy(curl_output + used, line_buf, ll); used += ll;
-        }
-        curl_output[used] = '\0';
-        status = pclose(fp); fp = NULL;
-        curl_exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        em_printfout("[TOPO-WS] curl exit_code=%d output_len=%zu", curl_exit_code, used);
-
-        if (curl_exit_code == 0 && used > 0) {
-            while (used > 0 && (curl_output[used-1] == '\n' ||
-                                curl_output[used-1] == '\r' ||
-                                curl_output[used-1] == ' '))
-                curl_output[--used] = '\0';
-            if (used > 0 && curl_output[0] == '<') {
-                em_printfout("[TOPO-WS] SAT endpoint returned HTML error page (gateway error), treating as failure");
-                break;
-            }
-            /* Strip surrounding double quotes if the server wrapped the token */
-            if (used >= 2 && curl_output[0] == '"' && curl_output[used-1] == '"') {
-                memmove(curl_output, curl_output + 1, used - 2);
-                used -= 2;
-                curl_output[used] = '\0';
-                em_printfout("[TOPO-WS] Stripped surrounding quotes from token (new len=%zu)", used);
-            }
-            if (used > 0 && used < token_out_len) {
-                memcpy(token_out, curl_output, used + 1);
-                em_printfout("[TOPO-WS] SAT token fetched OK (len=%zu)", used);
-                return 0;
-            }
-            em_printfout("[TOPO-WS] curl output empty or too large (used=%zu max=%zu)", used, token_out_len);
-        } else {
-            em_printfout("[TOPO-WS] curl failed or empty response (exit_code=%d used=%zu)", curl_exit_code, used);
-        }
-
-        if (curl_exit_code == 58 && attempt == 0) {
-            em_printfout("[TOPO-WS] PKCS12 password stale (curl error 58), refreshing and retrying");
-            memset(password, 0, sizeof(password));
-            if (system("GetConfigFile /tmp/.cfgDynamicSExpki") != 0) {
-                em_printfout("[TOPO-WS] GetConfigFile retry failed");
-                return -1;
-            }
-            fp = popen("cat /tmp/.cfgDynamicSExpki", "r");
-            if (fp == NULL || !fgets(password, sizeof(password), fp)) {
-                em_printfout("[TOPO-WS] Password retry read failed");
-                if (fp) pclose(fp);
-                return -1;
-            }
-            pclose(fp); fp = NULL;
-            password[strcspn(password, "\r\n")] = '\0';
-            em_printfout("[TOPO-WS] Password refreshed OK, retrying curl");
-            continue;
-        }
-        break;
-    }
-    em_printfout("[TOPO-WS] SAT token fetch failed after all attempts");
-    return -1;
-}
-
-/* Check whether the peer has closed the connection before we attempt a write.
- * recv(MSG_PEEK|MSG_DONTWAIT) returns 0 on a graceful FIN — the case that never
- * raises SIGPIPE and where SSL_write would silently succeed into a dead socket. */
-static int em_topo_peer_closed(void)
-{
-    int fd = g_em_topo_ssl ? SSL_get_fd(g_em_topo_ssl) : g_em_topo_socket_fd;
-    if (fd < 0) return 1;
-
-    char peek;
-    ssize_t n = recv(fd, &peek, 1, MSG_PEEK | MSG_DONTWAIT);
-    if (n == 0) {
-        em_printfout("[TOPO-WS] peer_closed: peer sent FIN, connection gone");
-        return 1;
-    }
-    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        em_printfout("[TOPO-WS] peer_closed: socket error errno=%d (%s)", errno, strerror(errno));
-        return 1;
-    }
-    return 0;  /* EAGAIN/EWOULDBLOCK → no data pending, connection alive */
-}
-
-/* --- RFC 6455 WebSocket text frame encoding (client-to-server, masked) --- */
-static int ws_send_frame(const char *payload, size_t payload_len)
-{
-    unsigned char header[14];
-    size_t header_len = 0;
-    unsigned char mask[4];
-    uint32_t mask_val;
-    unsigned char *masked = NULL;
-    int ret;
-
-    if (!payload || payload_len == 0) return -1;
-
-    /* Random 4-byte masking key (required for client frames per RFC 6455 §5.3) */
-    mask_val = ((uint32_t)rand() << 16) ^ (uint32_t)rand();
-    mask[0] = (mask_val >> 24) & 0xFF;
-    mask[1] = (mask_val >> 16) & 0xFF;
-    mask[2] = (mask_val >>  8) & 0xFF;
-    mask[3] =  mask_val        & 0xFF;
-
-    /* FIN=1, RSV=0, opcode=0x1 (text frame) */
-    header[0] = 0x81;
-    if (payload_len <= 125) {
-        header[1] = 0x80 | (unsigned char)payload_len;
-        header_len = 2;
-    } else if (payload_len <= 65535) {
-        header[1] = 0x80 | 126;
-        header[2] = (unsigned char)((payload_len >> 8) & 0xFF);
-        header[3] = (unsigned char)( payload_len       & 0xFF);
-        header_len = 4;
-    } else {
-        header[1] = 0x80 | 127;
-        header[2] = 0; header[3] = 0; header[4] = 0; header[5] = 0;
-        header[6] = (unsigned char)((payload_len >> 24) & 0xFF);
-        header[7] = (unsigned char)((payload_len >> 16) & 0xFF);
-        header[8] = (unsigned char)((payload_len >>  8) & 0xFF);
-        header[9] = (unsigned char)( payload_len        & 0xFF);
-        header_len = 10;
-    }
-    /* Append masking key to header */
-    header[header_len++] = mask[0];
-    header[header_len++] = mask[1];
-    header[header_len++] = mask[2];
-    header[header_len++] = mask[3];
-
-    /* Mask the payload */
-    masked = (unsigned char *)malloc(payload_len);
-    if (!masked) {
-        em_printfout("[TOPO-WS] ws_send_frame: malloc failed (%zu bytes)", payload_len);
-        return -1;
-    }
-    for (size_t i = 0; i < payload_len; i++)
-        masked[i] = ((unsigned char)payload[i]) ^ mask[i & 3];
-
-    /* Send header then masked payload */
-    if (em_topo_peer_closed()) {
-        em_printfout("[TOPO-WS] ws_send_frame: peer closed before write");
-        free(masked);
-        return -1;
-    }
-    ret = g_em_topo_ssl ? SSL_write(g_em_topo_ssl, header, (int)header_len)
-                        : (int)send(g_em_topo_socket_fd, header, header_len, MSG_NOSIGNAL);
-    if (ret <= 0) {
-        em_printfout("[TOPO-WS] ws_send_frame: header write failed (ret=%d)", ret);
-        free(masked);
-        return -1;
-    }
-    ret = g_em_topo_ssl ? SSL_write(g_em_topo_ssl, masked, (int)payload_len)
-                        : (int)send(g_em_topo_socket_fd, masked, payload_len, MSG_NOSIGNAL);
-    free(masked);
-    if (ret <= 0) {
-        em_printfout("[TOPO-WS] ws_send_frame: payload write failed (ret=%d)", ret);
-        return -1;
-    }
-    return 0;
-}
-
-/* --- Read helpers + ping/pong-aware response reader (mirrors CSI_STREAM_WAIT_WS_RESPONSE) --- */
-static int em_topo_read(char *buf, size_t len)
-{
-    if (g_em_topo_ssl)
-        return SSL_read(g_em_topo_ssl, buf, (int)len);
-    return (int)recv(g_em_topo_socket_fd, buf, len, 0);
-}
-
-static int em_topo_read_exact(unsigned char *buf, size_t len)
-{
-    size_t used = 0;
-
-    while (used < len) {
-        int n = em_topo_read((char *)buf + used, len - used);
-        if (n <= 0) {
-            em_printfout("[TOPO-WS] read_exact failed: got %d after %zu/%zu bytes (errno=%d %s)",
-                n, used, len, errno, strerror(errno));
-            return -1;
-        }
-        used += (size_t)n;
-    }
-    return 0;
-}
-
-static int em_topo_send_all(const unsigned char *buf, size_t len)
-{
-    size_t sent = 0;
-    int    flags = 0;
-
-    if (em_topo_peer_closed()) {
-        em_printfout("[TOPO-WS] em_topo_send_all: peer closed before write");
-        return -1;
-    }
-
-#ifdef MSG_NOSIGNAL
-    flags = MSG_NOSIGNAL;
-#endif
-
-    while (sent < len) {
-        int n = g_em_topo_ssl
-            ? SSL_write(g_em_topo_ssl, buf + sent, (int)(len - sent))
-            : (int)send(g_em_topo_socket_fd, buf + sent, len - sent, flags);
-        if (n <= 0) {
-            return -1;
-        }
-        sent += (size_t)n;
-    }
-    return 0;
-}
-
-/* Masked control frame. Pass the opcode nibble: 0x8=close, 0x9=ping, 0xA=pong. */
-static int em_topo_send_ws_control_frame(unsigned char opcode,
-    const unsigned char *payload, size_t payload_len)
-{
-    unsigned char  header[6] = {0};
-    unsigned char  mask[4]   = {0};
-    unsigned char *masked    = NULL;
-    size_t         header_len = 0;
-    int            rc = -1;
-
-    /* Control frame opcodes are 0x8–0xF (bit 3 set); payload must be <= 125 bytes (RFC 6455 §5.5) */
-    if ((opcode & 0x08) == 0 || payload_len > 125) {
-        return -1;
-    }
-
-    header[0] = (unsigned char)(0x80 | (opcode & 0x0F));
-    header[1] = (unsigned char)(0x80 | payload_len);
-    header_len = 2;
-
-    em_printfout("[TOPO-WS] sending control frame opcode=0x%X payload_len=%zu",
-        (unsigned int)(opcode & 0x0F), payload_len);
-
-    if (RAND_bytes(mask, sizeof(mask)) != 1) {
-        em_printfout("[TOPO-WS] control frame RAND_bytes(mask) failed");
-        return -1;
-    }
-    memcpy(header + header_len, mask, sizeof(mask));
-    header_len += sizeof(mask);
-
-    if (payload_len > 0) {
-        masked = (unsigned char *)malloc(payload_len);
-        if (masked == NULL) {
-            return -1;
-        }
-        for (size_t i = 0; i < payload_len; i++) {
-            masked[i] = payload[i] ^ mask[i % 4];
-        }
-    }
-
-    if (em_topo_send_all(header, header_len) != 0) {
-        goto cleanup;
-    }
-    if (payload_len > 0 && em_topo_send_all(masked, payload_len) != 0) {
-        goto cleanup;
-    }
-    rc = 0;
-
-cleanup:
-    if (masked != NULL) {
-        free(masked);
-    }
-    return rc;
-}
-
-/* Read one application (text/binary) WebSocket frame into out. Ping frames are
- * answered with pong and skipped; pong frames are ignored; a close frame is
- * treated as an error. Returns payload length on success, -1 on error.
- *
- * The function acquires g_em_topo_sock_mtx for each frame read so it does not
- * race with the background ping-listener thread.
- */
-static int em_topo_recv_ws_response(char *out, size_t out_len)
-{
-    for (;;) {
-        unsigned char  hdr[2]     = {0};
-        unsigned char  ext_len[8] = {0};
-        unsigned char  mask[4]    = {0};
-        unsigned char *payload    = NULL;
-        size_t         payload_len = 0;
-        int            is_masked  = 0;
-        unsigned char  opcode     = 0;
-        int            rc         = -1;
-
-        pthread_mutex_lock(&g_em_topo_sock_mtx);
-
-        if (out == NULL || out_len == 0 || g_em_topo_socket_fd < 0) {
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            return -1;
-        }
-
-        out[0] = '\0';
-
-        em_printfout("[TOPO-WS] recv_ws_response: waiting for frame header");
-        if (em_topo_read_exact(hdr, sizeof(hdr)) != 0) {
-            em_printfout("[TOPO-WS] recv_ws_response: failed reading 2-byte frame header");
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            return -1;
-        }
-
-        opcode      = (unsigned char)(hdr[0] & 0x0F);
-        is_masked   = ((hdr[1] & 0x80) != 0);
-        payload_len = (size_t)(hdr[1] & 0x7F);
-
-        em_printfout("[TOPO-WS] frame header: fin=%d opcode=0x%X masked=%d len7=%zu",
-            (hdr[0] & 0x80) ? 1 : 0, (unsigned int)opcode, is_masked, payload_len);
-
-        if (payload_len == 126) {
-            if (em_topo_read_exact(ext_len, 2) != 0) {
-                em_printfout("[TOPO-WS] failed reading 16-bit extended length");
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                return -1;
-            }
-            payload_len = ((size_t)ext_len[0] << 8) | (size_t)ext_len[1];
-            em_printfout("[TOPO-WS] extended 16-bit payload_len=%zu", payload_len);
-        } else if (payload_len == 127) {
-            if (em_topo_read_exact(ext_len, 8) != 0) {
-                em_printfout("[TOPO-WS] failed reading 64-bit extended length");
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                return -1;
-            }
-            if (ext_len[0] || ext_len[1] || ext_len[2] || ext_len[3]) {
-                em_printfout("[TOPO-WS] 64-bit payload length too large (>4GB), rejecting");
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                return -1;
-            }
-            payload_len = ((size_t)ext_len[4] << 24) |
-                          ((size_t)ext_len[5] << 16) |
-                          ((size_t)ext_len[6] << 8)  |
-                          (size_t)ext_len[7];
-            em_printfout("[TOPO-WS] extended 64-bit payload_len=%zu", payload_len);
-        }
-
-        if (is_masked) {
-            if (em_topo_read_exact(mask, sizeof(mask)) != 0) {
-                em_printfout("[TOPO-WS] failed reading 4-byte mask key");
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                return -1;
-            }
-        }
-
-        payload = (unsigned char *)malloc(payload_len + 1);
-        if (payload == NULL) {
-            em_printfout("[TOPO-WS] malloc(%zu) for payload failed", payload_len + 1);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            return -1;
-        }
-
-        if (payload_len > 0 && em_topo_read_exact(payload, payload_len) != 0) {
-            em_printfout("[TOPO-WS] failed reading %zu-byte payload body", payload_len);
-            free(payload);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            return -1;
-        }
-
-        if (is_masked) {
-            for (size_t i = 0; i < payload_len; i++) {
-                payload[i] ^= mask[i % 4];
-            }
-        }
-        payload[payload_len] = '\0';
-
-        if (opcode == 0x9) {                 /* ping -> reply with pong */
-            em_printfout("[TOPO-WS] PING frame received (len=%zu), replying with PONG", payload_len);
-            if (em_topo_send_ws_control_frame(0xA, payload, payload_len) != 0) {
-                em_printfout("[TOPO-WS] failed to send PONG reply");
-                free(payload);
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                return -1;
-            }
-            em_printfout("[TOPO-WS] websocket ping received, pong sent len=%zu", payload_len);
-            free(payload);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            continue;
-        }
-
-        if (opcode == 0xA) {                 /* pong -> ignore and keep reading */
-            em_printfout("[TOPO-WS] PONG frame received (len=%zu), ignoring and continuing", payload_len);
-            free(payload);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            continue;
-        }
-
-        if (opcode == 0x8) {                 /* close -> treat as error */
-            em_printfout("[TOPO-WS] websocket close frame received len=%zu", payload_len);
-            free(payload);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            return -1;
-        }
-
-        em_printfout("[TOPO-WS] application frame (opcode=0x%X) received, returning %zu bytes: %s",
-            (unsigned int)opcode, payload_len, (const char *)payload);
-        snprintf(out, out_len, "%s", (const char *)payload);
-        rc = (int)payload_len;
-        free(payload);
-        pthread_mutex_unlock(&g_em_topo_sock_mtx);
-        return rc;
-    }
-}
-
-/* ---- Background ping-listener thread ----
- *
- * Runs for the entire program lifetime (started once in main()).  Waits for
- * incoming frames and immediately replies to any RFC 6455 Ping (opcode 0x9)
- * with a Pong (0xA), keeping the server from closing an idle connection due to
- * missed heartbeats.  All other unsolicited frames are silently discarded.
- * On any error or Close frame the thread waits for the connection to be
- * re-established (g_em_topo_ws_ready) and then resumes — it never exits.
- *
- * g_em_topo_sock_mtx serialises ALL SSL reads and writes so that concurrent
- * Pong sends from this thread and topology-data sends from the main thread
- * never call SSL_write on the same SSL* simultaneously.
- */
-static void *em_topo_ping_listener_thread(void *arg)
-{
-    (void)arg;
-    em_printfout("[TOPO-WS] ping-listener thread started (tid=%lu)", (unsigned long)pthread_self());
-
-    while (!g_em_topo_listen_stop) {
-        int fd = g_em_topo_socket_fd;
-        if (fd < 0 || !g_em_topo_ws_ready) {
-            usleep(200000); /* wait until TCP+TLS+WS upgrade are all complete */
-            continue;
-        }
-
-        /* Wait up to 1 s so we can re-check the stop flag regularly */
-        fd_set rfds;
-        struct timeval tv = {1, 0};
-        FD_ZERO(&rfds);
-        FD_SET(fd, &rfds);
-        int rc = select(fd + 1, &rfds, NULL, NULL, &tv);
-        if (rc < 0) {
-            if (errno == EINTR) continue;
-            /* EBADF / EINVAL fires when em_topo_close() closes the fd while we
-             * are blocked in select().  Fall back to the fd < 0 sleep path
-             * until the connection is re-established. */
-            em_printfout("[TOPO-WS] ping-listener: select error %d (%s), waiting for reconnect",
-                         errno, strerror(errno));
-            usleep(200000);
-            continue;
-        }
-        if (rc == 0) continue; /* 1 s timeout — re-check stop flag */
-
-        /* Data available – acquire the socket lock and read one full frame */
-        pthread_mutex_lock(&g_em_topo_sock_mtx);
-
-        /* fd may have been closed between select() and the lock */
-        if (g_em_topo_socket_fd < 0) {
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            em_printfout("[TOPO-WS] ping-listener: fd closed under us, waiting for reconnect");
-            usleep(200000);
-            continue;
-        }
-        if (g_em_topo_listen_stop) {
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            break; /* only legitimate exit */
-        }
-
-        unsigned char hdr[2] = {0};
-        if (em_topo_read_exact(hdr, sizeof(hdr)) != 0) {
-            em_printfout("[TOPO-WS] ping-listener: failed reading frame header, waiting for reconnect");
-            g_em_topo_ws_ready = 0;
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            continue;
-        }
-
-        unsigned char  opcode      = (unsigned char)(hdr[0] & 0x0F);
-        int            is_masked   = ((hdr[1] & 0x80) != 0);
-        size_t         payload_len = (size_t)(hdr[1] & 0x7F);
-
-        /* RFC 6455 §5.5: control frames (Ping/Pong/Close) must not exceed
-         * 125 bytes.  Reject oversized frames to prevent unbounded malloc. */
-        if ((opcode & 0x08) && payload_len > 125) {
-            em_printfout("[TOPO-WS] ping-listener: oversized control frame "
-                         "opcode=0x%X len=%zu, stream framing lost", (unsigned int)opcode, payload_len);
-            g_em_topo_ws_ready = 0;
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            continue;
-        }
-
-        if (payload_len == 126) {
-            unsigned char ext[2] = {0};
-            if (em_topo_read_exact(ext, 2) != 0) {
-                em_printfout("[TOPO-WS] ping-listener: failed reading 16-bit ext length, waiting for reconnect");
-                g_em_topo_ws_ready = 0;
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                continue;
-            }
-            payload_len = ((size_t)ext[0] << 8) | (size_t)ext[1];
-        } else if (payload_len == 127) {
-            unsigned char ext[8] = {0};
-            if (em_topo_read_exact(ext, 8) != 0) {
-                em_printfout("[TOPO-WS] ping-listener: failed reading 64-bit ext length, waiting for reconnect");
-                g_em_topo_ws_ready = 0;
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                continue;
-            }
-            payload_len = ((size_t)ext[4] << 24) | ((size_t)ext[5] << 16) |
-                          ((size_t)ext[6] << 8)  |  (size_t)ext[7];
-        }
-
-        unsigned char mask[4] = {0};
-        if (is_masked) {
-            if (em_topo_read_exact(mask, sizeof(mask)) != 0) {
-                em_printfout("[TOPO-WS] ping-listener: failed reading mask key, waiting for reconnect");
-                g_em_topo_ws_ready = 0;
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                continue;
-            }
-        }
-
-        unsigned char *payload = NULL;
-        if (payload_len > 0) {
-            payload = (unsigned char *)malloc(payload_len + 1);
-            if (payload == NULL) {
-                em_printfout("[TOPO-WS] ping-listener: malloc(%zu) failed, waiting for reconnect",
-                             payload_len + 1);
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                usleep(200000);
-                continue;
-            }
-            if (em_topo_read_exact(payload, payload_len) != 0) {
-                em_printfout("[TOPO-WS] ping-listener: failed reading payload body, waiting for reconnect");
-                free(payload);
-                g_em_topo_ws_ready = 0;
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                continue;
-            }
-            if (is_masked) {
-                for (size_t i = 0; i < payload_len; i++) {
-                    payload[i] ^= mask[i % 4];
-                }
-            }
-        }
-
-        em_printfout("[TOPO-WS] ping-listener: frame opcode=0x%X payload_len=%zu",
-                     (unsigned int)opcode, payload_len);
-
-        if (opcode == 0x9) {                    /* Ping -> reply with Pong */
-            em_printfout("[TOPO-WS] ping-listener: PING received (len=%zu), sending PONG", payload_len);
-            if (em_topo_send_ws_control_frame(0xA, payload, payload_len) != 0) {
-                em_printfout("[TOPO-WS] ping-listener: failed to send PONG, waiting for reconnect");
-                free(payload);
-                g_em_topo_ws_ready = 0;
-                pthread_mutex_unlock(&g_em_topo_sock_mtx);
-                continue;
-            }
-            em_printfout("[TOPO-WS] ping-listener: PONG sent (len=%zu)", payload_len);
-        } else if (opcode == 0x8) {             /* Close frame — connection going down */
-            em_printfout("[TOPO-WS] ping-listener: CLOSE frame received, waiting for reconnect");
-            free(payload);
-            pthread_mutex_unlock(&g_em_topo_sock_mtx);
-            /* Tear down the fd now so that g_em_topo_ws_ready=0 and
-             * g_em_topo_socket_fd=-1 are visible at the top-of-loop guard
-             * on the very next iteration.  Without this the loop re-enters
-             * select()/read_exact on the already-closed fd and logs spurious
-             * "read_exact failed" errors until the main thread eventually
-             * calls em_topo_close() itself. */
-            em_topo_close();
-            continue;
-        } else if (opcode == 0xA) {             /* Pong -> ignore */
-            em_printfout("[TOPO-WS] ping-listener: PONG received (ignored)");
-        } else {
-            em_printfout("[TOPO-WS] ping-listener: unexpected opcode=0x%X (ignored)", (unsigned int)opcode);
-        }
-
-        free(payload);
-        pthread_mutex_unlock(&g_em_topo_sock_mtx);
-    }
-
-    em_printfout("[TOPO-WS] ping-listener thread exiting (tid=%lu)", (unsigned long)pthread_self());
-    return NULL;
-}
-
-static void em_topo_start_ping_listener(void)
-{
-    g_em_topo_listen_stop = 0;
-    if (pthread_create(&g_em_topo_ping_tid, NULL, em_topo_ping_listener_thread, NULL) != 0) {
-        em_printfout("[TOPO-WS] failed to create ping-listener thread: %s", strerror(errno));
-        g_em_topo_ping_tid = 0;
-    } else {
-        em_printfout("[TOPO-WS] ping-listener thread created (tid=%lu)",
-                     (unsigned long)g_em_topo_ping_tid);
-    }
-}
-
-#if 0
-static void em_topo_stop_ping_listener(void)
-{
-    if (g_em_topo_ping_tid != 0) {
-        g_em_topo_listen_stop = 1;
-        pthread_join(g_em_topo_ping_tid, NULL);
-        g_em_topo_ping_tid = 0;
-        em_printfout("[TOPO-WS] ping-listener thread joined");
-    }
-}
-#endif
-
-static void em_topo_close(void)
-{
-    em_printfout("[TOPO-WS] Closing connection (fd=%d ssl=%p)", g_em_topo_socket_fd, (void *)g_em_topo_ssl);
-
-    /* Clear the ready flag first so the ping-listener stops issuing new reads
-     * as soon as possible, before we acquire the lock. */
-    g_em_topo_ws_ready = 0;
-
-    /* Acquire the socket mutex before touching the SSL object.  The ping-
-     * listener thread may be mid-SSL_read while holding this mutex; waiting
-     * here ensures we never call SSL_shutdown/SSL_free concurrently with
-     * SSL_read — which is undefined behaviour in OpenSSL. */
-    pthread_mutex_lock(&g_em_topo_sock_mtx);
-
-    if (g_em_topo_ssl) {
-        em_printfout("[TOPO-WS] SSL_shutdown + SSL_free");
-        /* Make the socket non-blocking so SSL_shutdown() does not block
-         * waiting for the peer's close_notify.  The peer may already be
-         * gone (e.g. after a WebSocket CLOSE frame), causing a blocking
-         * SSL_shutdown() to stall for tens of seconds and hold the mutex,
-         * which starves all other threads and triggers the watchdog. */
-        int _fd = SSL_get_fd(g_em_topo_ssl);
-        if (_fd >= 0) {
-            int _flags = fcntl(_fd, F_GETFL, 0);
-            if (_flags >= 0)
-                fcntl(_fd, F_SETFL, _flags | O_NONBLOCK);
-        }
-        SSL_shutdown(g_em_topo_ssl);
-        SSL_free(g_em_topo_ssl);
-        g_em_topo_ssl = NULL;
-    }
-    if (g_em_topo_ssl_ctx) {
-        em_printfout("[TOPO-WS] SSL_CTX_free");
-        SSL_CTX_free(g_em_topo_ssl_ctx);
-        g_em_topo_ssl_ctx = NULL;
-    }
-    if (g_em_topo_socket_fd >= 0) {
-        em_printfout("[TOPO-WS] closing socket fd=%d", g_em_topo_socket_fd);
-        close(g_em_topo_socket_fd);
-        g_em_topo_socket_fd = -1;
-    }
-
-    pthread_mutex_unlock(&g_em_topo_sock_mtx);
-    em_printfout("[TOPO-WS] Connection closed");
-}
-
-/* --- Entry point: called from publish_network_topology() --- */
-void em_topo_stream_send_topology(const char *topology_json)
-{
-    char          *envelope_str = NULL;
-    char           ts_buf[64]   = {0};
-    struct timeval tv_now       = {0};
-
-    if (topology_json == NULL) {
-        em_printfout("[TOPO-WS] topology_json is NULL, skipping");
-        return;
-    }
-
-    g_em_topo_order_id++;
-    gettimeofday(&tv_now, NULL);
-
-    cJSON *envelope = cJSON_CreateObject();
-    if (envelope == NULL) {
-        em_printfout("[TOPO-WS] cJSON_CreateObject failed");
-        return;
-    }
-
-    /* Format: {"cm_mac","ordering_id","app_type","timestamp"(mmddyyHHMMSS),"payload"(string)} */
-    {
-        struct tm tm_now;
-        char id_buf[32] = {0};
-        localtime_r(&tv_now.tv_sec, &tm_now);
-        strftime(ts_buf, sizeof(ts_buf), "%m%d%y%H%M%S", &tm_now);
-        snprintf(id_buf, sizeof(id_buf), "%llu", g_em_topo_order_id);
-        cJSON_AddStringToObject(envelope, "cm_mac",      g_em_topo_gateway_mac);
-        cJSON_AddStringToObject(envelope, "ordering_id", id_buf);
-        cJSON_AddStringToObject(envelope, "app_type",    "easyMesh");
-        cJSON_AddStringToObject(envelope, "timestamp",   ts_buf);
-        {
-            cJSON *payload_obj = cJSON_Parse(topology_json);
-            if (payload_obj) {
-                cJSON_AddItemToObject(envelope, "payload", payload_obj);
-            } else {
-                cJSON_AddStringToObject(envelope, "payload", topology_json);
-            }
-        }
-    }
-
-    envelope_str = cJSON_PrintUnformatted(envelope);
-    cJSON_Delete(envelope);
-    if (envelope_str == NULL) {
-        em_printfout("[TOPO-WS] cJSON_PrintUnformatted failed");
-        return;
-    }
-
-    em_printfout("[TOPO-WS] Sending topology #%llu ts=%s mac=%s", g_em_topo_order_id, ts_buf, g_em_topo_gateway_mac);
-
-    /* Retry once: an idle reused connection may have been closed by the peer
-     * between publishes, which only surfaces as a write failure on the next send. */
-    for (int send_attempt = 0; send_attempt < 5; send_attempt++) {
-
-    /* ---- Connect (only if not already up) ---- */
-    if (g_em_topo_socket_fd < 0 || !g_em_topo_ws_ready) {
-        em_topo_close(); /* no-op if already closed; cleans up if ping-listener flagged it broken */
-        em_printfout("[TOPO-WS] No active connection, starting connect sequence");
-        em_printfout("[TOPO-WS] Target URL: %s", g_em_topo_stream_url);
-
-        char token[EM_TOPO_STREAM_TOKEN_SIZE] = {0};
-        em_printfout("[TOPO-WS] Fetching SAT token from %s", EM_TOPO_STREAM_SAT_URL);
-        if (em_topo_fetch_sat_token(token, sizeof(token)) == 0) {
-            em_printfout("[TOPO-WS] SAT token fetched OK (len=%zu)", strlen(token));
-            em_topo_build_url_with_token(token);
-            em_printfout("[TOPO-WS] URL updated with token: %s", g_em_topo_stream_url);
-        } else {
-            em_printfout("[TOPO-WS] SAT token fetch failed, proceeding without token");
-        }
-
-        em_topo_url_info_t info;
-        char port_str[8] = {0};
-        struct addrinfo hints = {}, *result = NULL;
-
-        em_printfout("[TOPO-WS] Parsing URL: %s", g_em_topo_stream_url);
-        if (!em_topo_parse_url(&info)) {
-            em_printfout("[TOPO-WS] URL parse failed");
-            em_topo_close(); continue;
-        }
-        snprintf(port_str, sizeof(port_str), "%u", (unsigned int)info.port);
-        em_printfout("[TOPO-WS] Parsed — host=%s port=%s path=%s tls=%d",
-            info.host, port_str, info.path_query, info.use_tls);
-
-        em_printfout("[TOPO-WS] Resolving DNS for %s", info.host);
-        hints.ai_family = AF_UNSPEC; hints.ai_socktype = SOCK_STREAM;
-        if (getaddrinfo(info.host, port_str, &hints, &result) != 0 || !result) {
-            em_printfout("[TOPO-WS] DNS lookup failed for %s", info.host);
-            em_topo_close(); continue;
-        }
-        em_printfout("[TOPO-WS] DNS resolved OK, attempting TCP connect to %s:%s", info.host, port_str);
-
-        for (struct addrinfo *rp = result; rp; rp = rp->ai_next) {
-            int fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-            if (fd < 0) {
-                em_printfout("[TOPO-WS] socket() failed: %s", strerror(errno));
-                continue;
-            }
-            if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-                g_em_topo_socket_fd = fd;
-                break;
-            }
-            em_printfout("[TOPO-WS] connect() failed: %s", strerror(errno));
-            close(fd);
-        }
-        freeaddrinfo(result);
-
-        if (g_em_topo_socket_fd < 0) {
-            em_printfout("[TOPO-WS] TCP connect to %s:%s failed", info.host, port_str);
-            em_topo_close(); continue;
-        }
-        em_printfout("[TOPO-WS] TCP connected to %s:%s (fd=%d)", info.host, port_str, g_em_topo_socket_fd);
-
-        if (info.use_tls) {
-            em_printfout("[TOPO-WS] Starting TLS setup");
-            SSL_library_init();
-            g_em_topo_ssl_ctx = SSL_CTX_new(TLS_client_method());
-            if (g_em_topo_ssl_ctx == NULL) {
-                em_printfout("[TOPO-WS] SSL_CTX_new failed");
-                em_topo_close(); continue;
-            }
-            em_printfout("[TOPO-WS] SSL_CTX created OK");
-#if OPENSSL_VERSION_NUMBER >= 0x10101000L
-            SSL_CTX_set_keylog_callback(g_em_topo_ssl_ctx, em_topo_ssl_keylog_cb);
-            em_printfout("[TOPO-WS] SSL key logging enabled -> %s", EM_TOPO_SSL_KEYLOG_FILE);
-#else
-            em_printfout("[TOPO-WS] SSL key logging NOT available (OpenSSL < 1.1.1)");
-#endif
-
-            g_em_topo_ssl = SSL_new(g_em_topo_ssl_ctx);
-            if (g_em_topo_ssl == NULL) {
-                em_printfout("[TOPO-WS] SSL_new failed");
-                em_topo_close(); continue;
-            }
-            em_printfout("[TOPO-WS] SSL object created OK");
-
-            SSL_set_tlsext_host_name(g_em_topo_ssl, info.host);
-            SSL_set_fd(g_em_topo_ssl, g_em_topo_socket_fd);
-            em_printfout("[TOPO-WS] Calling SSL_connect to %s", info.host);
-            if (SSL_connect(g_em_topo_ssl) != 1) {
-                em_printfout("[TOPO-WS] SSL_connect failed (SSL error=%d)", SSL_get_error(g_em_topo_ssl, -1));
-                em_topo_close(); continue;
-            }
-            em_printfout("[TOPO-WS] TLS handshake OK — cipher=%s", SSL_get_cipher(g_em_topo_ssl));
-        }
-
-        char req[2048] = {0}, resp[1024] = {0};
-        unsigned char ws_key_bytes[16];
-        char ws_key_b64[25] = {0};
-        RAND_bytes(ws_key_bytes, sizeof(ws_key_bytes));
-        EVP_EncodeBlock((unsigned char *)ws_key_b64, ws_key_bytes, sizeof(ws_key_bytes));
-        snprintf(req, sizeof(req),
-            "GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n"
-            "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\n"
-            "Sec-WebSocket-Version: 13\r\n\r\n",
-            info.path_query, info.host, ws_key_b64);
-        em_printfout("[TOPO-WS] Sending WS upgrade request (%zu bytes):\n%s", strlen(req), req);
-
-        int w = g_em_topo_ssl ? SSL_write(g_em_topo_ssl, req, (int)strlen(req))
-                               : (int)send(g_em_topo_socket_fd, req, strlen(req), 0);
-        em_printfout("[TOPO-WS] WS upgrade write returned %d (expected %zu)", w, strlen(req));
-        if (w <= 0) {
-            em_printfout("[TOPO-WS] WS upgrade write failed");
-            em_topo_close(); continue;
-        }
-
-        int r = g_em_topo_ssl ? SSL_read(g_em_topo_ssl, resp, (int)sizeof(resp) - 1)
-                               : (int)recv(g_em_topo_socket_fd, resp, sizeof(resp) - 1, 0);
-        em_printfout("[TOPO-WS] WS upgrade read returned %d bytes", r);
-        if (r <= 0) {
-            em_printfout("[TOPO-WS] WS upgrade read failed");
-            em_topo_close(); continue;
-        }
-        resp[r] = '\0';
-        em_printfout("[TOPO-WS] WS upgrade response: %.120s", resp);
-
-        if (!strstr(resp, "101")) {
-            em_printfout("[TOPO-WS] WS upgrade rejected — no 101 in response");
-            em_topo_close(); continue;
-        }
-        em_printfout("[TOPO-WS] WS upgrade OK — connected to %s:%s%s", info.host, port_str, info.path_query);
-        g_em_topo_ws_ready = 1; /* ping-listener may now monitor this fd */
-    } else {
-        em_printfout("[TOPO-WS] Reusing existing connection (fd=%d)", g_em_topo_socket_fd);
-    }
-
-    /* ---- Send ----
-     * Hold g_em_topo_sock_mtx for the entire send so that a concurrent Pong
-     * from the ping-listener thread cannot interleave SSL_write calls on the
-     * same SSL* object. em_topo_recv_ws_response() acquires the mutex
-     * internally per-frame, so release it before calling that. */
-    {
-        size_t jlen = strlen(envelope_str);
-        em_printfout("[TOPO-WS] Sending DataFrame #%llu len=%zu", g_em_topo_order_id, jlen);
-        em_printfout("[TOPO-WS] DataFrame content: %s", envelope_str);
-        pthread_mutex_lock(&g_em_topo_sock_mtx);
-        int n = ws_send_frame(envelope_str, jlen);
-        pthread_mutex_unlock(&g_em_topo_sock_mtx);
-        if (n == 0) {
-            em_printfout("[TOPO-WS] DataFrame sent successfully #%llu len=%zu", g_em_topo_order_id, jlen);
-#if EM_TOPO_WAIT_WS_RESPONSE
-            {
-                char ws_response[512] = {0};
-                int  resp_len = em_topo_recv_ws_response(ws_response, sizeof(ws_response));
-
-                if (resp_len < 0) {
-                    em_printfout("[TOPO-WS] failed to read websocket response #%llu, closing connection",
-                        g_em_topo_order_id);
-                    em_topo_close();
-                    continue;
-                }
-                em_printfout("[TOPO-WS] websocket response: %s", ws_response);
-            }
-#endif
-            break;
-        }
-        em_printfout("[TOPO-WS] Send failed #%llu — closing connection", g_em_topo_order_id);
-        em_topo_close();
-        continue;
-    }
-    } /* end send_attempt retry loop */
-
-    free(envelope_str);
-}
-
-#endif /* EM_WEBSOCKET_PUSH */
 
 em_ctrl_t *em_ctrl_t::s_em_ctrl = NULL;
 em_network_topo_t *g_network_topology = NULL;
@@ -1176,8 +99,12 @@ void em_ctrl_t::handle_dm_commit(em_bus_event_t *evt)
         }
         em_printfout("data model dev mac: %s and int.mac: %s\n", util::mac_to_string(new_dm.m_device.m_device_info.id.dev_mac).c_str(),
             util::mac_to_string(new_dm.m_device.m_device_info.intf.mac).c_str());
+        new_dm.m_device.m_device_info.is_emplus_agent = info->is_emplus_agent;
         new_dm.set_db_cfg_param(db_cfg_type_device_list_update, "");
         m_data_model.set_config(&new_dm);
+    } else {
+        dm->get_device_info()->is_emplus_agent = info->is_emplus_agent;
+        dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
     }
 }
 
@@ -1333,7 +260,6 @@ void em_ctrl_t::handle_m2_tx(em_bus_event_t *evt)
 {
     em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
     int num;
-    
     if ((num = m_data_model.analyze_m2_tx(evt, pcmd)) > 0) {
         m_orch->submit_commands(pcmd, static_cast<unsigned int> (num));
     }
@@ -1578,6 +504,133 @@ void em_ctrl_t::handle_link_stats_alarm_report(em_bus_event_t *evt)
     cJSON_Delete(parent);
 }
 
+void em_ctrl_t::handle_failed_conn_msg(unsigned char *data, unsigned int len)
+{
+    char *errors[EM_MAX_TLV_MEMBERS] = {0};
+
+    if (em_msg_t(em_msg_type_failed_conn, em_profile_type_3, data, len).validate(errors) == 0) {
+        em_printfout("Failed Connection message validation failed");
+        return;
+    }
+
+    unsigned int hdr_size = static_cast<unsigned int>(sizeof(em_raw_hdr_t)) + static_cast<unsigned int>(sizeof(em_cmdu_t));
+    if (len <= hdr_size) {
+        em_printfout("Failed Connection message too short");
+        return;
+    }
+    unsigned char *tmp = data + hdr_size;
+    unsigned int remaining = len - hdr_size;
+    mac_address_t bssid = {0};
+    mac_address_t sta_mac = {0};
+    unsigned short status_code = 0;
+    unsigned short reason_code = 0;
+    bool has_bssid = false, has_sta = false, has_status = false;
+
+    while (remaining >= sizeof(em_tlv_t)) {
+        em_tlv_t *tlv = reinterpret_cast<em_tlv_t *>(tmp);
+        unsigned short tlv_len = ntohs(tlv->len);
+
+        if (tlv->type == em_tlv_type_eom) {
+            break;
+        }
+        if (remaining < sizeof(em_tlv_t) + tlv_len) {
+            break;
+        }
+
+        switch (tlv->type) {
+            case em_tlv_type_bssid:
+                memcpy(bssid, tlv->value, sizeof(mac_address_t));
+                has_bssid = true;
+                break;
+            case em_tlv_type_sta_mac_addr:
+                memcpy(sta_mac, tlv->value, sizeof(mac_address_t));
+                has_sta = true;
+                break;
+            case em_tlv_type_status_code: {
+                em_status_code_t *sc = reinterpret_cast<em_status_code_t *>(tlv->value);
+                status_code = ntohs(sc->status_code);
+                has_status = true;
+                break;
+            }
+            case em_tlv_type_reason_code: {
+                if (tlv_len < sizeof(em_reason_code_t)) {
+                    em_printfout("Failed Connection message malformed Reason Code TLV (len=%u)", static_cast<unsigned int>(tlv_len));
+                    break;
+                }
+                em_reason_code_t *rc = reinterpret_cast<em_reason_code_t *>(tlv->value);
+                reason_code = ntohs(rc->reason_code);
+                break;
+            }
+            default:
+                break;
+        }
+
+        tmp += sizeof(em_tlv_t) + tlv_len;
+        remaining -= static_cast<unsigned int>(sizeof(em_tlv_t)) + tlv_len;
+    }
+
+    if (!has_bssid || !has_sta || !has_status) {
+        em_printfout("Failed Connection message missing mandatory TLVs");
+        return;
+    }
+
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    struct tm tm_info;
+    gmtime_r(&ts.tv_sec, &tm_info);
+    char timestamp[MAX_TIMESTAMP_STRLEN];
+    snprintf(timestamp, sizeof(timestamp), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+        tm_info.tm_year + 1900, tm_info.tm_mon + 1, tm_info.tm_mday,
+        tm_info.tm_hour, tm_info.tm_min, tm_info.tm_sec);
+
+    mac_addr_str_t bssid_str, sta_str;
+    dm_easy_mesh_t::macbytes_to_string(bssid, bssid_str);
+    dm_easy_mesh_t::macbytes_to_string(sta_mac, sta_str);
+
+    cJSON *obj = cJSON_CreateObject();
+    if (obj == nullptr) {
+        em_printfout("Failed to allocate JSON object for FailedConnectionEvent");
+        return;
+    }
+
+    cJSON_AddStringToObject(obj, "BSSID", bssid_str);
+    cJSON_AddStringToObject(obj, "MACAddress", sta_str);
+    cJSON_AddNumberToObject(obj, "StatusCode", status_code);
+    cJSON_AddNumberToObject(obj, "ReasonCode", reason_code);
+    cJSON_AddStringToObject(obj, "TimeStamp", timestamp);
+
+    char *str = cJSON_Print(obj);
+    cJSON_Delete(obj);
+
+    if (str == nullptr) {
+        em_printfout("Failed to serialize FailedConnectionEvent JSON");
+        return;
+    }
+
+    wifi_bus_desc_t *desc = get_bus_descriptor();
+    if (desc == nullptr) {
+        em_printfout("Bus descriptor is null");
+        free(str);
+        return;
+    }
+
+    raw_data_t raw;
+    memset(&raw, 0, sizeof(raw));
+    raw.data_type = bus_data_type_string;
+    raw.raw_data.bytes = reinterpret_cast<unsigned char *>(str);
+    raw.raw_data_len = static_cast<unsigned int>(strlen(str));
+
+    if (desc->bus_event_publish_fn(m_data_model.get_bus_hdl(), DEVICE_WIFI_DATAELEMENTS_FAILED_CONNECTION, &raw) == 0) {
+        em_printfout("FailedConnectionEvent published: bssid=%s sta=%s status=%u reason=%u",
+            bssid_str, sta_str, status_code, reason_code);
+    } else {
+        em_printfout("FailedConnectionEvent publish failed");
+    }
+
+    free(str);
+}
+
+
 void em_ctrl_t::handle_dirty_dm()
 {
 	m_data_model.handle_dirty_dm();
@@ -1784,13 +837,28 @@ void em_ctrl_t::publish_network_topology()
 
     if((desc = get_bus_descriptor()) == NULL) {
         printf("%s:%d descriptor is null\n", __func__, __LINE__);
+        return;
     }
 
     parent = cJSON_CreateObject();
+    if (parent == NULL) {
+        printf("%s:%d cJSON_CreateObject failed\n", __func__, __LINE__);
+        return;
+    }
     dm_ctrl = reinterpret_cast<dm_easy_mesh_ctrl_t *>(get_data_model(GLOBAL_NET_ID));
+    if (dm_ctrl == NULL) {
+        printf("%s:%d data model is null\n", __func__, __LINE__);
+        cJSON_Delete(parent);
+        return;
+    }
     dm_ctrl->get_network_config(parent, const_cast<char*>(GLOBAL_NET_ID));
 
     str = cJSON_Print(parent);
+    if (str == NULL) {
+        printf("%s:%d cJSON_Print failed\n", __func__, __LINE__);
+        cJSON_Delete(parent);
+        return;
+    }
     em_printfout("    ===============Publish Network Topology Json:\n%s\n===============\n",str);
 
 	raw.data_type    = bus_data_type_string;
@@ -1803,9 +871,6 @@ void em_ctrl_t::publish_network_topology()
         em_printfout("Topology publish fail");
     }
 
-#ifdef EM_WEBSOCKET_PUSH
-    em_topo_stream_send_topology(str);
-#endif
     free(str);
     cJSON_Delete(parent);
 
@@ -1924,8 +989,10 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
     em_profile_type_t profile;
     unsigned int i;
     mac_addr_str_t mac_str1 = {0}, mac_str2 = {0};
-    em_commit_info_t dm_commit;
+    em_commit_info_t dm_commit = {};
     mac_address_t fallback_ruid = {0};
+    em_supported_service_t svc = {};
+    uint8_t is_emplus;
 
     assert(len > ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))));
     if (len < ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)))) {
@@ -1956,6 +1023,17 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
 
             dm_easy_mesh_t::macbytes_to_string(intf.mac, mac_str1);
             em_printfout("[%s] Received autoconfig search from agent al mac: %s\n", __func__, mac_str1);
+
+            is_emplus = 0;
+            if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)), len - static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_supported_service(&svc)) {
+                for (i = 0; i < svc.num && i < EM_MAX_SERVICE; i++) {
+                    if (svc.service[i] == em_service_type_emplus_agent) {
+                        is_emplus = 1;
+                        break;
+                    }
+                }
+            }
+
             if ((dm = get_data_model(GLOBAL_NET_ID, const_cast<const unsigned char *> (intf.mac))) == NULL) {
                 if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)), len - static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_profile(&profile) == false) {
                     profile = em_profile_type_1;
@@ -1963,11 +1041,14 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
                 //dm = create_data_model(GLOBAL_NET_ID, const_cast<const em_interface_t *> (&intf), profile);
                 memcpy(dm_commit.mac, intf.mac, sizeof(mac_addr_t));
                 strncpy(dm_commit.net_id, GLOBAL_NET_ID, sizeof(dm_commit.net_id));
+                dm_commit.is_emplus_agent = is_emplus;
                 io_process(em_bus_event_type_dm_commit, reinterpret_cast<unsigned char *> (&dm_commit), sizeof(em_commit_info_t));
-                em_printfout("[%s] Creating data model for mac: %s net: %s\n", __func__, mac_str1, GLOBAL_NET_ID);
+                em_printfout("[%s] Creating data model for mac: %s net: %s emplus: %d\n", __func__, mac_str1, GLOBAL_NET_ID, is_emplus);
             } else {
+                dm->get_device_info()->is_emplus_agent = is_emplus;
+                dm->set_db_cfg_param(db_cfg_type_device_list_update, "");
                 dm_easy_mesh_t::macbytes_to_string(dm->get_agent_al_interface_mac(), mac_str1);
-                em_printfout("[%s] Found existing data model for mac: %s net: %s\n", __func__, mac_str1, GLOBAL_NET_ID);
+                em_printfout("[%s] Found existing data model for mac: %s net: %s emplus: %d\n", __func__, mac_str1, GLOBAL_NET_ID, is_emplus);
             }
             em = al_em;
             break;
@@ -2057,11 +1138,8 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
 	    }
 
 	    break;
-        case em_msg_type_topo_resp:
-        case em_msg_type_channel_pref_rprt:
         case em_msg_type_channel_sel_rsp:
         case em_msg_type_op_channel_rprt:
-        case em_msg_type_ap_cap_rprt:
             if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                     len - static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_radio_id(&ruid) == false) {
                 em_printfout("Could not find radio id in msg:0x%04x", htons(cmdu->type));
@@ -2072,6 +1150,27 @@ em_t *em_ctrl_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em_
             if ((em = static_cast<em_t *> (hash_map_get(m_em_map, mac_str1))) == NULL) {
                 em_printfout("Could not find radio:%s", mac_str1);
                 return NULL;
+            }
+            break;
+
+        case em_msg_type_topo_resp:
+        case em_msg_type_ap_cap_rprt:
+        case em_msg_type_channel_pref_rprt:
+            if ((dm = get_data_model(GLOBAL_NET_ID, const_cast<const unsigned char *>(hdr->src))) == NULL) {
+                em_printfout("Cannot find data model for agent AL MAC %s", util::mac_to_string(hdr->src).c_str());
+                em = NULL;
+                break;
+            }
+            em = NULL;
+            for (i = 0; i < dm->get_num_radios(); i++) {
+                dm_easy_mesh_t::macbytes_to_string(dm->get_radio_info(i)->id.ruid, mac_str1);
+                em = static_cast<em_t *>(hash_map_get(m_em_map, mac_str1));
+                if (em != NULL) {
+                    break;
+                }
+            }
+            if (em == NULL) {
+                em_printfout("No EM found for agent AL MAC %s", util::mac_to_string(hdr->src).c_str());
             }
             break;
 
@@ -2306,8 +1405,14 @@ void em_ctrl_t::start_complete()
          { const_cast<char*>(DEVICE_WIFI_DATAELEMENTS_NETWORK_NODE_LINKSTATS_ALARM), bus_element_type_method,
             { NULL, NULL , NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
             { bus_data_type_string, false, 0, 0, 0, NULL } },
+        { const_cast<char*>(DEVICE_WIFI_DATAELEMENTS_FAILED_CONNECTION), bus_element_type_event,
+            { NULL, NULL , NULL, NULL, NULL, NULL }, slow_speed, ZERO_TABLE,
+            { bus_data_type_string, false, 0, 0, 0, NULL } },
         { const_cast<char*>(DEVICE_WIFI_DATAELEMENTS_NETWORK_SETSSID_CMD), bus_element_type_method,
             { NULL, NULL , NULL, NULL, NULL, tr_181_t::setssid_handler}, slow_speed, ZERO_TABLE,
+            { bus_data_type_property, false, 0, 0, 0, NULL } },
+        { const_cast<char*>(DE_DEVICE_UNASSOCSTALMQ), bus_element_type_method,
+            { NULL, NULL , NULL, NULL, NULL, tr_181_t::unassocstalinkmetricsquery_handler}, slow_speed, ZERO_TABLE,
             { bus_data_type_property, false, 0, 0, 0, NULL } },
         { const_cast<char*>(DE_MAPDEVBH_STEERWIFIBH), bus_element_type_method,
             { NULL, NULL , NULL, NULL, NULL, tr_181_t::steerwifibh_handler}, slow_speed, ZERO_TABLE,
@@ -2419,43 +1524,55 @@ em_ctrl_t::~em_ctrl_t()
 #ifdef AL_SAP
 AlServiceAccessPoint* em_ctrl_t::al_sap_register(const std::string& data_socket_path, const std::string& control_socket_path)
 {
-    AlServiceAccessPoint* sap = new AlServiceAccessPoint(data_socket_path.c_str(), control_socket_path.c_str());
+    AlServiceAccessPoint* sap = NULL;
+    try {
+        sap = new AlServiceAccessPoint(data_socket_path.c_str(), control_socket_path.c_str());
+        if (NULL == sap) {
+            em_printfout("%s-%d: Failed to allocate AlServiceAccessPoint", __func__, __LINE__);
+            return NULL;
+        }
 
-    AlServiceRegistrationRequest registrationRequest(SAPActivation::SAP_ENABLE, ServiceType::EmController);
-    sap->serviceAccessPointRegistrationRequest(registrationRequest);
+        AlServiceRegistrationRequest registrationRequest(SAPActivation::SAP_ENABLE, ServiceType::EmController);
+        sap->serviceAccessPointRegistrationRequest(registrationRequest);
 
-    AlServiceRegistrationResponse registrationResponse = sap->serviceAccessPointRegistrationResponse();
+        AlServiceRegistrationResponse registrationResponse = sap->serviceAccessPointRegistrationResponse();
 
-    RegistrationResult result = registrationResponse.getResult();
-    if (result == RegistrationResult::SUCCESS) {
-        g_al_mac_sap = registrationResponse.getAlMacAddressLocal();
-        uint8_t* al_mac_bytes = g_al_mac_sap.data();
-        em_printfout("AL SAP registration successful, AL MAC: %s", util::mac_to_string(al_mac_bytes).c_str());
-
-        m_data_model.set_dev_interface_mac(al_mac_bytes);
-    } else {
-        std::cout << "Registration failed with error: " << static_cast<int>(result) << std::endl;
+        RegistrationResult result = registrationResponse.getResult();
+        if (result == RegistrationResult::SUCCESS) {
+            g_al_mac_sap = registrationResponse.getAlMacAddressLocal();
+            uint8_t* al_mac_bytes = g_al_mac_sap.data();
+            if (NULL == al_mac_bytes) {
+                em_printfout("%s-%d: AL SAP registration failed with invalid AL MAC: %s", util::mac_to_string(al_mac_bytes).c_str());
+                delete sap;
+                return NULL;
+            }
+            em_printfout("AL SAP registration successful, AL MAC: %s", util::mac_to_string(al_mac_bytes).c_str());
+            m_data_model.set_dev_interface_mac(al_mac_bytes);
+        } else {
+            std::cout << "Registration failed with error: " << static_cast<int>(result) << std::endl;
+            delete sap;
+            return NULL;
+        }
+    }
+    catch (const AlServiceException& e) {
+        em_printfout("%s-%d: AL SAP registration exception %s", __func__, __LINE__, e.what());
+        delete sap;
+        return NULL;
+    }
+    catch (const std::exception e) {
+        em_printfout("%s-%d: Unknown exception %s during AL SAP registration", __func__, __LINE__, e.what());
+        delete sap;
+        return NULL;
     }
 
     return sap;
 }
 #endif
 
-static volatile sig_atomic_t g_sigpipe_received = 0;
-
-static void handle_sigpipe(int)
-{
-    g_sigpipe_received = 1;
-    /* write() is async-signal-safe; must not use printf/em_printfout here */
-    const char msg[] = "[em_ctrl] SIGPIPE received: broken SSL/socket write\n";
-    (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
-}
 
 #ifndef TESTING
 int main(int argc, const char *argv[])
 {
-    signal(SIGPIPE, handle_sigpipe);
-
     em_ctrl_t  *em_ctrl = em_ctrl_t::get_em_ctrl_instance();
     const char *data_model_path = NULL;
     bool passive = false;
@@ -2463,47 +1580,34 @@ int main(int argc, const char *argv[])
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--passive") == 0) {
             passive = true;
-        } else if (strncmp(argv[i], "--cmmac=", 8) == 0) {
-#ifdef EM_WEBSOCKET_PUSH
-            snprintf(g_em_topo_gateway_mac, sizeof(g_em_topo_gateway_mac), "%s", argv[i] + 8);
-            em_printfout("Gateway MAC set from CLI: %s", g_em_topo_gateway_mac);
-#endif
         } else {
             data_model_path = argv[i];
         }
     }
 
     if (passive == true) {
-#ifdef EM_WEBSOCKET_PUSH
-        if (g_em_topo_gateway_mac[0] == '\0') {
-            FILE *mac_fp = popen("deviceinfo.sh -cmac 2>/dev/null || "
-                                 "cat /sys/class/net/brlan0/address 2>/dev/null || "
-                                 "cat /sys/class/net/erouter0/address 2>/dev/null", "r");
-            if (mac_fp) {
-                if (fgets(g_em_topo_gateway_mac, sizeof(g_em_topo_gateway_mac), mac_fp))
-                    g_em_topo_gateway_mac[strcspn(g_em_topo_gateway_mac, "\r\n")] = '\0';
-                pclose(mac_fp);
-            }
-            if (g_em_topo_gateway_mac[0] == '\0') {
-                snprintf(g_em_topo_gateway_mac, sizeof(g_em_topo_gateway_mac), "unknown");
-            }
-            em_printfout("Gateway CM-MAC fetched at runtime: %s", g_em_topo_gateway_mac);
-        }
-#endif
         em_ctrl->set_passive(true);
         em_printfout("Controller started in passive mode");
     }
 
 #ifdef AL_SAP
-    g_sap = em_ctrl->al_sap_register("/tmp/al_em_ctrl_data_socket", "/tmp/al_em_ctrl_control_socket");
-#endif
+    const char* data_socket_path = "/tmp/al_em_ctrl_data_socket";
+    const char* control_socket_path = "/tmp/al_em_ctrl_control_socket";
 
-#ifdef EM_WEBSOCKET_PUSH
-    /* Start the WebSocket ping-listener once for the whole program lifetime.
-     * It waits on select() until a connection is up, then keeps the session
-     * alive by answering server Ping frames with Pong throughout all topology
-     * send cycles and idle periods. */
-    em_topo_start_ping_listener();
+    if(0 == access(data_socket_path, F_OK) && 0 == access(control_socket_path, F_OK)) {
+        g_sap = em_ctrl->al_sap_register(data_socket_path, control_socket_path);
+        if (NULL == g_sap) {
+            em_printfout("%s-%d: Error in AL SAP registration, exiting", __func__, __LINE__);
+            return -1;
+        }
+    }
+    else {
+        em_printfout("%s-%d: Data Socket: %s, Control Socket: %s", __func__, __FILE__,
+	              access(data_socket_path, F_OK) == 0 ? "present" : "missing",
+                      access(control_socket_path, F_OK) == 0 ? "present" : "missing");
+        em_printfout("%s-%d: Required AL SAP socket(s) not available, exiting", __func__, __LINE__);
+        return -1;
+    }
 #endif
 
     if (em_ctrl->init(data_model_path) == 0) {
