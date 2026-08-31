@@ -358,7 +358,15 @@ void dm_sta_t::operator = (const dm_sta_t& obj)
     this->m_sta_info.errors_tx = obj.m_sta_info.errors_tx;
     this->m_sta_info.errors_rx = obj.m_sta_info.errors_rx;
 
-    memcpy(&this->m_sta_info.frame_body, &obj.m_sta_info.frame_body, obj.m_sta_info.frame_body_len);
+    // Clamp to the destination size: frame_body_len must never exceed the fixed
+    // frame_body[] capacity, otherwise this copy overruns the struct. Also copy
+    // frame_body_len itself so the assigned object stays self-consistent.
+    if (obj.m_sta_info.frame_body_len > sizeof(this->m_sta_info.frame_body)) {
+        this->m_sta_info.frame_body_len = static_cast<unsigned int>(sizeof(this->m_sta_info.frame_body));
+    } else {
+        this->m_sta_info.frame_body_len = obj.m_sta_info.frame_body_len;
+    }
+    memcpy(&this->m_sta_info.frame_body, &obj.m_sta_info.frame_body, this->m_sta_info.frame_body_len);
     this->m_sta_info.num_vendor_infos = obj.m_sta_info.num_vendor_infos;
     memcpy(&this->m_sta_info.ht_cap, &obj.m_sta_info.ht_cap, sizeof(em_long_string_t));
     memcpy(&this->m_sta_info.vht_cap, &obj.m_sta_info.vht_cap, sizeof(em_long_string_t));

@@ -48,6 +48,9 @@ void em_network_topo_t::encode(cJSON *parent)
 	for (i = 0; i < m_data_model->m_num_radios; i++) {
 		radio_obj = cJSON_CreateObject();
 		m_data_model->m_radio[i].encode(radio_obj, em_get_radio_list_reason_radio_summary);
+		em_printfout("Radio[%d] intf.mac: %s id.ruid: %s", i,
+			util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str(),
+			util::mac_to_string(m_data_model->m_radio[i].m_radio_info.id.ruid).c_str());
 		for (j = 0; j < m_data_model->m_num_opclass; j++){
 			em_op_class_info_t *op_class_info = &m_data_model->m_op_class[j].m_op_class_info;
 			if ((memcmp(op_class_info->id.ruid, m_data_model->m_radio[i].get_radio_interface_mac(), sizeof(mac_address_t)) == 0) &&
@@ -57,7 +60,12 @@ void em_network_topo_t::encode(cJSON *parent)
 				em_printfout("Radio %s Current Operating Class: %d Channel: %d",
 					util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str(),
 					op_class_info->op_class, op_class_info->channel);
+				break;
 			}
+		}
+		if (j == m_data_model->m_num_opclass) {
+			em_printfout("WARNING: No current operating class found for Radio[%d] %s", i,
+				util::mac_to_string(m_data_model->m_radio[i].get_radio_interface_mac()).c_str());
 		}
 		cJSON_AddItemToArray(radio_list_obj, radio_obj);
 		bss_list_obj = cJSON_AddArrayToObject(radio_obj, "BSSList");
