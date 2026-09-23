@@ -127,8 +127,8 @@ AGENT_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/em/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/utils/*.cpp) \
 	
 
--include $(ONEWIFI_EM_HOME)/custom/custom.mk
-AGENT_SOURCES += $(CUSTOM_AGENT_SOURCES)
+-include $(ONEWIFI_EM_HOME)/vendor/vendor.mk
+AGENT_SOURCES += $(VENDOR_AGENT_SOURCES)
 
 AGENT_OBJECTS = $(AGENT_SOURCES:.cpp=.o)
 GENERIC_OBJECTS = $(GENERIC_SOURCES:.c=.o) 

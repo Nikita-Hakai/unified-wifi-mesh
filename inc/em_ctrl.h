@@ -34,7 +34,10 @@
 class em_cmd_ctrl_t;
 class AlServiceAccessPoint;
 
+// todo: should be moved accordingly if moved to websocket app
+#ifdef EM_WEBSOCKET_PUSH
 void em_topo_stream_send_topology(const char *topology_json);
+#endif
 
 class em_ctrl_t : public em_mgr_t {
 

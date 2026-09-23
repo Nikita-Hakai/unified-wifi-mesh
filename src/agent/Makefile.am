@@ -37,6 +37,9 @@ onewifi_em_agent_CXXFLAGS = $(INCLUDEDIRS) -g -Wall -Wextra -pedantic -Wpedantic
 if EM_ASAN_AGENT
 onewifi_em_agent_CXXFLAGS += -fsanitize=address -fsanitize=undefined
 endif
+if EM_WEBSOCKET_PUSH
+onewifi_em_agent_CXXFLAGS += -DEM_WEBSOCKET_PUSH
+endif
 
 onewifi_em_agent_SOURCES =  \
      $(top_srcdir)/src/em/em.cpp \

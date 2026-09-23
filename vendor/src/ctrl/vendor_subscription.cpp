@@ -39,9 +39,10 @@ static bus_error_t rcv_wei_data_set_cb(char *event_name, raw_data_t *p_data, bus
     char *json_str = cJSON_PrintUnformatted(parsed);
     cJSON_Delete(parsed);
     if (json_str == NULL) return bus_error_general;
-
-    em_topo_stream_send_topology(json_str);
-
+#ifdef EM_WEBSOCKET_PUSH
+    // todo: no defintionition, i gues sits moved, hence commenting to avoid compilation error
+    // em_topo_stream_send_topology(json_str);
+#endif
     free(json_str);
     return bus_error_success;
 }

@@ -22,7 +22,7 @@ AM_CFLAGS += -D_ANSC_LITTLE_ENDIAN_
 ACLOCAL_AMFLAGS = -I m4
 hardware_platform = i686-linux-gnu
 
-include $(top_srcdir)/custom/custom.mk
+include $(top_srcdir)/vendor/vendor.mk
 
 bin_PROGRAMS = onewifi_em_ctrl
 if EM_UNITTEST
@@ -34,11 +34,14 @@ onewifi_em_ctrl_CPPFLAGS = \
     -I$(top_srcdir)/src/utils \
     -I$(top_srcdir)/src/util \
     -I$(top_srcdir)/src/util_crypto\
-    -I$(top_srcdir)/custom/inc
+    -I$(top_srcdir)/vendor/inc
 
 onewifi_em_ctrl_CXXFLAGS = $(INCLUDEDIRS) -g -Wall -Wextra -pedantic -Wpedantic -Wpointer-arith -Wcast-qual -Wcast-align -Wstrict-aliasing -fno-common -Wctor-dtor-privacy -Wold-style-cast -Woverloaded-virtual -Wsign-promo -Wstrict-null-sentinel -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -pie -ftrapv -Wformat=2 -Wformat-security -Wuninitialized -Winit-self -Wsign-conversion -Weffc++ -Wno-unused-parameter -std=c++17 -fno-omit-frame-pointer #-Wconversion -Werror -O2
 if EM_ASAN_CTRL
 onewifi_em_ctrl_CXXFLAGS += -fsanitize=address -fsanitize=undefined
+endif
+if EM_WEBSOCKET_PUSH
+onewifi_em_ctrl_CXXFLAGS += -DEM_WEBSOCKET_PUSH
 endif
 
 onewifi_em_ctrl_SOURCES =  \
@@ -149,7 +152,7 @@ onewifi_em_ctrl_SOURCES =  \
      $(top_srcdir)/src/util_crypto/aes_siv.c \
      $(top_srcdir)/src/utils/util.cpp \
      $(top_srcdir)/src/utils/timer.cpp\
-     $(CUSTOM_CTRL_SOURCES)
+     $(VENDOR_CTRL_SOURCES)
  
  
 onewifi_em_ctrl_LDFLAGS = -lm -lpthread -ldl -luuid -lcjson -lssl -lcrypto -lrbus -lmariadb

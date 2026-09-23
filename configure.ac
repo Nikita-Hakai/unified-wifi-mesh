@@ -40,8 +40,10 @@ AM_CONDITIONAL([EM_UNITTEST], [test "x$EM_UNITTEST" = "xtrue"])
 AM_CONDITIONAL([EM_ASAN_CTRL], [test "x$EM_ASAN_CTRL" = "xtrue"])
 # Check for ASAN in em_agent
 AM_CONDITIONAL([EM_ASAN_AGENT], [test "x$EM_ASAN_AGENT" = "xtrue"])
+# Enable WebSocket push support
+AM_CONDITIONAL([EM_WEBSOCKET_PUSH], [test "x$EM_WEBSOCKET_PUSH" = "xtrue"])
 
-AM_CONDITIONAL([HAVE_CUSTOM], [test -d "$srcdir/custom/src"])
+AM_CONDITIONAL([HAVE_CUSTOM], [test -d "$srcdir/vendor/src"])
 
 # Checks for programs.
 AC_PROG_CC
