@@ -146,9 +146,9 @@ bool em_orch_agent_t::is_em_ready_for_orch_fini(em_cmd_t *pcmd, em_t *em)
             break;
 
         case em_cmd_type_generic_data:
-            em_printfout("WEI debug: is_em_ready_for_orch_fini check, em state:%s", em_t::state_2_str(em->get_state()));
-            if (em->get_state() == em_state_agent_configured) {
-                em_printfout("WEI debug: is_em_ready_for_orch_fini returning true (state==configured)");
+            em_printfout("WEI debug: is_em_ready_for_orch_fini check, em state:%s, processed:%d", em_t::state_2_str(em->get_state()), pcmd->processed);
+            if (pcmd->processed == true) {
+                em_printfout("WEI debug: is_em_ready_for_orch_fini returning true (cmd processed)");
                 return true;
             }
             break;
