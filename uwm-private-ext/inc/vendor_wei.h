@@ -16,19 +16,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <string.h>
-#include "dm_sta.h"
-#include "dm_easy_mesh.h"
+#ifndef VENDOR_WEI_H
+#define VENDOR_WEI_H
+
 #include "em_vendor.h"
 #include "lq_socket.h"
 
-class em_vendor_ctrl_t : public em_vendor_ext_interface_t {
+// WEI private vendor extension: builds the vendor-specific TLV payload on the
+// agent (build_vendor_tlv_ext) and decodes it on the controller
+// (handle_vendor_tlv_ext). Compiled into both the agent and controller
+// binaries (like em_capability_t), so each side only exercises the half of
+// this class relevant to its role.
+class em_vendor_wei_t : public em_vendor_ext_interface_t {
 public:
     int handle_vendor_tlv_ext(const unsigned char *tlv_value,
                                unsigned int         tlv_len,
                                dm_easy_mesh_t      *dm) override;
 
+    int build_vendor_tlv_ext(const unsigned char *raw_data,
+                              unsigned int         raw_len,
+                              unsigned char       *tlv_value,
+                              unsigned int        *tlv_val_len) override;
+
 private:
-    void publish_wei_app(wei_data_t wei_data);
-    // static void wei_app_cb();
+    void publish_wei_app(stats_arg_t wei_data);
 };
+
+#endif // VENDOR_WEI_H

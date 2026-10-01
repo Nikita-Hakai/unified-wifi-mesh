@@ -1335,7 +1335,7 @@ short em_t::create_airties_radio_capability_tlv(unsigned char *buff)
             return 0;
         }
         uint16_t supported_standards = htons(variant_to_airties_standards(cap_info->mode));
-        em_vendor_specific_v_t *vendor = reinterpret_cast<em_vendor_specific_v_t *>(buff);
+        em_vendor_specific_t *vendor = reinterpret_cast<em_vendor_specific_t *>(buff);
         if (vendor == NULL) {
             em_printfout("No data Found");
             return 0;

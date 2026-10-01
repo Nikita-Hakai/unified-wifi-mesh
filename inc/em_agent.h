@@ -1097,7 +1097,6 @@ public:
 	 * @note Ensure that the data pointer is valid before accessing its contents.
 	 */
 	static int report_cb(char *event_name, bus_data_prop_t *data, void *userData);
-   static int wei_data_cb(char *event_name, bus_data_prop_t *data, void *userData);
 	/**!
 	 * @brief Retrieves the associated data for the given input.
 	 *

@@ -1770,21 +1770,9 @@ typedef struct {
 } __attribute__((__packed__)) em_1905_mac_addr_t;
 
 typedef struct {
-    // this is of type vendor_ext_attr_id_t for vendor specific attributes
-    unsigned char attr_id;
-    unsigned char  vendor_data[0];
-} __attribute__((__packed__)) em_vendor_data_t;
-
-typedef struct {
-    unsigned char  vendor_oui[3];
-    unsigned char num;
-    em_vendor_data_t  data[0];
-} __attribute__((__packed__)) em_vendor_specific_t;
-
-typedef struct {
     unsigned char  vendor_oui[3];
     unsigned char  data[0];
-} __attribute__((__packed__)) em_vendor_specific_v_t;
+} __attribute__((__packed__)) em_vendor_specific_t;
 
 typedef struct {
     mac_address_t interface_mac;
@@ -2319,10 +2307,6 @@ typedef enum {
     vendor_ext_attr_id_policy_cfg_client_filter,    // data of type em_client_filters_cfg_t
     vendor_ext_attr_id_link_report,     // data of type em_link_report_t
     vendor_ext_attr_id_passive,         // 1 byte: 0x01 indicates controller is in passive mode
-
-    //comcast vendor extension attributes, 0x100 - 0x1FF
-    vendor_ext_attr_id_wei_data = 0xcc,
-
 
     vendor_ext_attr_id_max
 } vendor_ext_attr_id_t;

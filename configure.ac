@@ -41,7 +41,7 @@ AM_CONDITIONAL([EM_ASAN_CTRL], [test "x$EM_ASAN_CTRL" = "xtrue"])
 # Check for ASAN in em_agent
 AM_CONDITIONAL([EM_ASAN_AGENT], [test "x$EM_ASAN_AGENT" = "xtrue"])
 
-AM_CONDITIONAL([HAVE_CUSTOM], [test -d "$srcdir/custom/src"])
+AM_CONDITIONAL([HAVE_UWM_PRIVATE_EXT], [test -d "$srcdir/uwm-private-ext/src"])
 
 # Checks for programs.
 AC_PROG_CC

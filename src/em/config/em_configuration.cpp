@@ -4053,12 +4053,11 @@ int em_configuration_t::create_autoconfig_wsc_m2_msg(unsigned char *buff, unsign
         tlv = reinterpret_cast<em_tlv_t *> (tmp);
         tlv->type = em_tlv_type_vendor_specific;
         em_vendor_specific_t *vs = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
-        // em_vendor_data_t data;
+        // vs->data layout : [attr_id (1 byte)][vendor_data (1 byte)]
         memcpy(vs->vendor_oui, comcast_vendor_oui, EM_VENDOR_OUI_SIZE);
-        vs->num = 1;
-        vs->data[0].attr_id = static_cast<unsigned char> (vendor_ext_attr_id_passive);
-        vs->data[0].vendor_data[0] = 0x01;
-        unsigned short vs_len = static_cast<unsigned short> (EM_VENDOR_OUI_SIZE + 1 + sizeof(em_vendor_data_t) + 1);
+        vs->data[0] = static_cast<unsigned char> (vendor_ext_attr_id_passive);
+        vs->data[1] = 0x01;
+        unsigned short vs_len = static_cast<unsigned short> (EM_VENDOR_OUI_SIZE + 1 + 1 + 1);
         tlv->len = htons(vs_len);
 
         tmp += (sizeof(em_tlv_t) + vs_len);
@@ -4274,11 +4273,11 @@ int em_configuration_t::create_autoconfig_resp_msg(unsigned char* buff, em_freq_
         tlv = reinterpret_cast<em_tlv_t *> (tmp);
         tlv->type = em_tlv_type_vendor_specific;
         em_vendor_specific_t *vs = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
+        // vs->data layout: [attr_id (1 byte)][vendor_data (1 byte)]
         memcpy(vs->vendor_oui, comcast_vendor_oui, EM_VENDOR_OUI_SIZE);
-        vs->num = 1;
-        vs->data[0].attr_id = static_cast<unsigned char> (vendor_ext_attr_id_passive);
-        vs->data[0].vendor_data[0] = 0x01;
-        unsigned short vs_len = static_cast<unsigned short> (EM_VENDOR_OUI_SIZE + 1 + sizeof(em_vendor_data_t) + 1);
+        vs->data[0] = static_cast<unsigned char> (vendor_ext_attr_id_passive);
+        vs->data[1] = 0x01;
+        unsigned short vs_len = static_cast<unsigned short> (EM_VENDOR_OUI_SIZE + 1 + 1 + 1);
         tlv->len = htons(vs_len);
 
         tmp += (sizeof(em_tlv_t) + vs_len);
@@ -4578,12 +4577,12 @@ int em_configuration_t::handle_autoconfig_wsc_m2(unsigned char *buff, unsigned i
             handle_ap_mld_config_tlv(tlv->value, htons(tlv->len));
         } else if (tlv->type == em_tlv_type_vendor_specific) {
             unsigned short vlen = htons(tlv->len);
-            if (vlen >= static_cast<unsigned short>(EM_VENDOR_OUI_SIZE + 1 + sizeof(em_vendor_data_t) + 1)) {
+            if (vlen >= static_cast<unsigned short>(EM_VENDOR_OUI_SIZE + 1 + 1 + 1)) {
                 em_vendor_specific_t *vs = reinterpret_cast<em_vendor_specific_t *>(tlv->value);
+                // vs->data layout: [attr_id (1 byte)][vendor_data (1 byte)]
                 if ((memcmp(vs->vendor_oui, comcast_vendor_oui, EM_VENDOR_OUI_SIZE) == 0) &&
-                    (vs->num >= 1) &&
-                    (vs->data[0].attr_id == static_cast<unsigned char>(vendor_ext_attr_id_passive)) &&
-                    (vs->data[0].vendor_data[0] == 0x01)) {
+                    (vs->data[0] == static_cast<unsigned char>(vendor_ext_attr_id_passive)) &&
+                    (vs->data[1] == 0x01)) {
                     em_printfout("Detected passive mode from controller via M2 vendor TLV");
                     get_mgr()->set_passive(true);
                 }
@@ -6038,12 +6037,12 @@ int em_configuration_t::handle_autoconfig_resp(unsigned char *buff, unsigned int
         while ((tlv->type != em_tlv_type_eom) && (tlv_remaining > 0)) {
             if (tlv->type == em_tlv_type_vendor_specific) {
                 unsigned short vlen = htons(tlv->len);
-                if (vlen >= static_cast<unsigned short>(EM_VENDOR_OUI_SIZE + 1 + sizeof(em_vendor_data_t) + 1)) {
+                if (vlen >= static_cast<unsigned short>(EM_VENDOR_OUI_SIZE + 1 + 1 + 1)) {
                     em_vendor_specific_t *vs = reinterpret_cast<em_vendor_specific_t *>(tlv->value);
+                    // vs->data layout: [attr_id (1 byte)][vendor_data (1 byte)]
                     if ((memcmp(vs->vendor_oui, comcast_vendor_oui, EM_VENDOR_OUI_SIZE) == 0) &&
-                        (vs->num >= 1) &&
-                        (vs->data[0].attr_id == static_cast<unsigned char>(vendor_ext_attr_id_passive)) &&
-                        (vs->data[0].vendor_data[0] == 0x01)) {
+                        (vs->data[0] == static_cast<unsigned char>(vendor_ext_attr_id_passive)) &&
+                        (vs->data[1] == 0x01)) {
                         em_printfout("Detected passive mode from controller via Autoconfig Response vendor TLV");
                         get_mgr()->set_passive(true);
                     }

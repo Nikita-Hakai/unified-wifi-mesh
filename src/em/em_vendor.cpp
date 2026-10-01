@@ -23,9 +23,7 @@
 #include "em_msg.h"
 #include "dm_easy_mesh.h"
 #include "em_cmd.h"
-
-#define EM_LQ_DATA_VENDOR_TLV_ATTR_ID 0x10
-
+    
 // Weak factory fallback: Returns nullptr if custom extension code is omitted
 __attribute__((weak)) em_vendor_ext_interface_t* create_em_vendor_ext() {
     return nullptr;
@@ -34,12 +32,11 @@ __attribute__((weak)) em_vendor_ext_interface_t* create_em_vendor_ext() {
 unsigned int em_vendor_t::get_vendor_id(unsigned char *buff) 
 {
     em_vendor_specific_t *vendor_data = reinterpret_cast<em_vendor_specific_t *> (buff);
-    em_printfout("vendor_data->num count [%d]", vendor_data->num);
+    // vendor_data->data layout: [attr_id (1 byte)][vendor_data...]
+    unsigned char attr_id = vendor_data->data[0];
+    em_printfout("vendor_data->attri [%d]", attr_id);
 
-    em_vendor_data_t *vendor_data_ptr = vendor_data->data;
-    em_printfout("vendor_data->attri [%d]", vendor_data_ptr->attr_id);
-
-    return static_cast<unsigned int>(vendor_data_ptr->attr_id);
+    return static_cast<unsigned int>(attr_id);
 }
 
 int em_vendor_t::handle_vendor_msg(unsigned char *buff, unsigned int len)
@@ -58,28 +55,21 @@ int em_vendor_t::handle_vendor_msg(unsigned char *buff, unsigned int len)
 
     tlv     = tlv_start;
     tmp_len = base_len;
-    em_vendor_data_t *vendor_data_ptr = nullptr;
 
     while ((tlv->type != em_tlv_type_eom) && (tmp_len > 0)) {
         if (tlv->type == em_tlv_type_vendor_specific) {
             em_vendor_specific_t *vendor_tlv = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
-            em_printfout("------->> Recvd vendor tlv, num: %d and tlv->len:%d", vendor_tlv->num, ntohs(tlv->len));
-            if ((vendor_tlv->num <= 0) || (ntohs(tlv->len) == 0)) {
+            em_printfout("------->> Recvd vendor tlv, tlv->len:%d", ntohs(tlv->len));
+            if (ntohs(tlv->len) == 0) {
                 break;
             }
 
-            for(int i = 0; i < vendor_tlv->num; i++) {
-                vendor_data_ptr = vendor_tlv->data;
-                em_printfout("Vendor data attr_id [%d]", vendor_data_ptr->attr_id);
-                 
-                if (vendor_data_ptr->attr_id == vendor_ext_attr_id_wei_data) {
-                    // Handle the LQ data vendor TLV
-                em_printfout("call vendor handler");
+            if (memcmp(vendor_tlv->vendor_oui, comcast_vendor_oui, EM_VENDOR_OUI_SIZE) == 0) {
+                // vendor_tlv->data layout: [attr_id (1 byte)][vendor_data...]
+                em_printfout("Vendor data attr_id [%d]", vendor_tlv->data[0]);
 
-                    handle_vendor_tlv_ext(tlv->value, ntohs(tlv->len), get_data_model());
-                    // handle_vendor_ext_tlv(tlv->value, ntohs(tlv->len), get_data_model());
-                }
-            }            
+                handle_vendor_tlv_ext(tlv->value, ntohs(tlv->len), get_data_model());
+            }
         }
         tmp_len -= (sizeof(em_tlv_t) + static_cast<size_t>(htons(tlv->len)));
         tlv = reinterpret_cast<em_tlv_t *>(
@@ -99,6 +89,17 @@ int em_vendor_t::handle_vendor_tlv_ext(const unsigned char *tlv_value,
     }
     em_printfout("Coming here %s:%d\n", __func__, __LINE__);
     return 0; // Default base fallback
+}
+
+int em_vendor_t::build_vendor_tlv_ext(const unsigned char *raw_data,
+                                       unsigned int         raw_len,
+                                       unsigned char       *tlv_value,
+                                       unsigned int        *tlv_val_len)
+{
+    if (m_vendor_ext) {
+        return m_vendor_ext->build_vendor_tlv_ext(raw_data, raw_len, tlv_value, tlv_val_len);
+    }
+    return -1; // No private extension available; nothing to send
 }
 
 // Sends the raw stats_arg_t[] bytes from the current vendor-data cmd
@@ -143,16 +144,14 @@ int em_vendor_t::send_vendor_msg()
     cmdu->last_frag_ind = 1;
     tmp += sizeof(em_cmdu_t); len += sizeof(em_cmdu_t);
 
-    /* Vendor-specific TLV: OUI + num(1) + attr_id(0x10) + raw bytes */
+    /* Vendor-specific TLV: attribute bytes built privately (see build_vendor_tlv_ext) */
     tlv = reinterpret_cast<em_tlv_t *>(tmp);
     tlv->type = em_tlv_type_vendor_specific;
-    unsigned char *vp = tlv->value;
-    memcpy(vp, comcast_vendor_oui, EM_VENDOR_OUI_SIZE);
-    vp += EM_VENDOR_OUI_SIZE;
-    *vp++ = 1;     // num
-    *vp++ = vendor_ext_attr_id_wei_data;
-    memcpy(vp, raw->data(), raw->size()); vp += raw->size();
-    unsigned int tlv_val_len = static_cast<unsigned int>(vp - tlv->value);
+    unsigned int tlv_val_len = 0;
+    if (build_vendor_tlv_ext(raw->data(), static_cast<unsigned int>(raw->size()), tlv->value, &tlv_val_len) != 0) {
+        em_printfout("No vendor extension available to build vendor TLV; skipping send");
+        return -1;
+    }
     em_printfout("Vendor TLV value length: %u\n", tlv_val_len);
     tlv->len = htons(static_cast<unsigned short>(tlv_val_len));
     tmp += sizeof(em_tlv_t) + tlv_val_len;

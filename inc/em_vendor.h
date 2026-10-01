@@ -39,6 +39,14 @@ public:
                                        unsigned int         tlv_len,
                                        dm_easy_mesh_t      *dm) = 0;
 
+    // Builds the vendor-specific attribute bytes (OUI + num + attr_id + payload)
+    // for tlv->value, given the raw data queued on the current cmd. Returns 0
+    // on success and fills *tlv_val_len, non-zero if nothing should be sent.
+    virtual int build_vendor_tlv_ext(const unsigned char *raw_data,
+                                      unsigned int         raw_len,
+                                      unsigned char       *tlv_value,
+                                      unsigned int        *tlv_val_len) = 0;
+
 };
 
 em_vendor_ext_interface_t* create_em_vendor_ext();
@@ -64,6 +72,13 @@ public:
     virtual int handle_vendor_tlv_ext(const unsigned char *tlv_value,
                                unsigned int         tlv_len,
                                dm_easy_mesh_t      *dm);
+
+    // Weak hook for building vendor TLV payloads — overridden by private
+    // repo to encode WEI stats as a vendor-specific attribute.
+    virtual int build_vendor_tlv_ext(const unsigned char *raw_data,
+                               unsigned int         raw_len,
+                               unsigned char       *tlv_value,
+                               unsigned int        *tlv_val_len);
 
     /**!
      * @brief Processes the state of the agent.

@@ -17,7 +17,7 @@
 ##########################################################################
 
 include ../makefile.inc
--include ../../custom/custom.mk
+-include ../../uwm-private-ext/uwm-private-ext.mk
 
 #
 # program
@@ -108,7 +108,7 @@ CTRL_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/em/*.cpp) \
 	$(ONEWIFI_EM_SRC)/utils/util.cpp \
 	$(ONEWIFI_EM_SRC)/utils/timer.cpp \
 
-CTRL_SOURCES += $(CUSTOM_CTRL_SOURCES)
+CTRL_SOURCES += $(HOOKS_CTRL_SOURCES)
 
 CTRL_OBJECTS = $(CTRL_SOURCES:.cpp=.o)
 GENERIC_OBJECTS = $(GENERIC_SOURCES:.c=.o) 
