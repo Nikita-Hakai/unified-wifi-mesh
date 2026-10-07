@@ -26,6 +26,14 @@
 #include "db_easy_mesh.h"
 #include "util.h"
 
+int db_easy_mesh_t::prepare_db_operation(db_client_t &db_client, dm_orch_type_t &op)
+{
+    if (!db_client.is_persistent()) {
+        op = dm_orch_type_none;
+    }
+    return 0;
+}
+
 char *db_easy_mesh_t::get_column_format(db_fmt_t fmt, unsigned int pos)
 {
     memset(fmt, 0, sizeof(db_fmt_t));
@@ -297,9 +305,9 @@ bool db_easy_mesh_t::entry_exists_in_table(db_client_t& db_client, void *key)
     db_query_t    query;
     void *ctx;
 
-    // no-op backend: nothing persisted, so the entry can never already exist
+    // With no persistence requirement, existing callers must not force reinsertion.
     if (!db_client.is_persistent()) {
-        return false;
+        return true;
     }
 
     memset(query, 0, sizeof(db_query_t));

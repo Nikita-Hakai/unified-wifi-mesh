@@ -22,20 +22,110 @@
 #include <stdio.h>
 #include <memory>
 #include "db_client_local.h"
+#include "db_client_none.h"
+#include "db_easy_mesh.h"
+
+class persistence_table_test_t : public db_easy_mesh_t {
+public:
+    persistence_table_test_t() {
+        init_table();
+        init_columns();
+    }
+    void init_table() override {
+        snprintf(m_table_name, sizeof(m_table_name), "PersistenceTest");
+    }
+    void init_columns() override {
+        m_num_cols = 2;
+        m_columns[0] = db_column_t("ID", db_data_type_char, 64);
+        m_columns[1] = db_column_t("Value", db_data_type_int, 0);
+    }
+    MOCK_METHOD(int, sync_db, (db_client_t &, void *), (override));
+    MOCK_METHOD(int, update_db, (db_client_t &, dm_orch_type_t, void *), (override));
+    MOCK_METHOD(bool, search_db, (db_client_t &, void *, void *), (override));
+    bool operator == (const db_easy_mesh_t &) override { return false; }
+    MOCK_METHOD(int, set_config, (db_client_t &, const cJSON *, void *), (override));
+    MOCK_METHOD(int, get_config, (cJSON *, void *, bool), (override));
+};
+
+class persistence_none_test_t : public db_client_none_t {
+public:
+    MOCK_METHOD(void *, execute, (const char *), (override));
+};
+
+class persistence_local_test_t : public db_client_local_t {
+public:
+    MOCK_METHOD(void *, execute, (const char *), (override));
+};
+
+TEST(db_persistence_Test, NoDatabaseSkipsAllPersistenceOperations) {
+    persistence_table_test_t table;
+    testing::StrictMock<persistence_none_test_t> db;
+    EXPECT_CALL(db, execute(testing::_)).Times(0);
+    for (dm_orch_type_t requested : {dm_orch_type_none, dm_orch_type_db_insert,
+            dm_orch_type_db_update, dm_orch_type_db_delete}) {
+        dm_orch_type_t op = requested;
+        ASSERT_EQ(table.prepare_db_operation(db, op), 0);
+        EXPECT_EQ(op, dm_orch_type_none);
+    }
+}
+
+TEST(db_persistence_Test, NoDatabaseSatisfiesExistenceCheckWithoutQuery) {
+    testing::StrictMock<persistence_table_test_t> table;
+    testing::StrictMock<persistence_none_test_t> db;
+    EXPECT_CALL(db, execute(testing::_)).Times(0);
+    char key[] = "device";
+    EXPECT_TRUE(table.entry_exists_in_table(db, key));
+}
+
+TEST(db_persistence_Test, SqlitePreservesExistingExistenceSearch) {
+    testing::StrictMock<persistence_table_test_t> table;
+    db_client_local_t db;
+    ASSERT_EQ(db.init(":memory:"), 0);
+    ASSERT_EQ(table.create_table(db), 0);
+    char key[] = "device";
+    EXPECT_CALL(table, search_db(testing::Ref(db), testing::_, key))
+        .WillOnce([&](db_client_t &client, void *ctx, void *) {
+            client.free_result(ctx);
+            return false;
+        });
+    EXPECT_FALSE(table.entry_exists_in_table(db, key));
+    ASSERT_EQ(table.insert_row(db, key, 1), 0);
+    EXPECT_CALL(table, search_db(testing::Ref(db), testing::_, key))
+        .WillOnce([&](db_client_t &client, void *ctx, void *) {
+            const bool found = client.next_result(ctx);
+            if (found) {
+                client.free_result(ctx);
+            }
+            return found;
+        });
+    EXPECT_TRUE(table.entry_exists_in_table(db, key));
+}
+
+TEST(db_persistence_Test, SqlitePreservesRequestedOperationWithoutQuery) {
+    persistence_table_test_t table;
+    testing::StrictMock<persistence_local_test_t> db;
+    EXPECT_CALL(db, execute(testing::_)).Times(0);
+    for (dm_orch_type_t requested : {dm_orch_type_none, dm_orch_type_db_insert,
+            dm_orch_type_db_update, dm_orch_type_db_delete}) {
+        dm_orch_type_t op = requested;
+        ASSERT_EQ(table.prepare_db_operation(db, op), 0);
+        EXPECT_EQ(op, requested);
+    }
+}
 
 TEST(db_client_backend_Test, ParsesBackendSelection)
 {
-    EXPECT_EQ(db_client_type_from_string(nullptr), db_client_type_local);
-    EXPECT_EQ(db_client_type_from_string("local"), db_client_type_local);
-    EXPECT_EQ(db_client_type_from_string("none"), db_client_type_none);
-    EXPECT_EQ(db_client_type_from_string("NO_DB"), db_client_type_none);
-    EXPECT_EQ(db_client_type_from_string("nodb"), db_client_type_none);
-    EXPECT_EQ(db_client_type_from_string("CLOUD"), db_client_type_cloud);
+    EXPECT_EQ(db_client_t::type_from_string(nullptr), db_client_type_local);
+    EXPECT_EQ(db_client_t::type_from_string("local"), db_client_type_local);
+    EXPECT_EQ(db_client_t::type_from_string("none"), db_client_type_none);
+    EXPECT_EQ(db_client_t::type_from_string("NO_DB"), db_client_type_none);
+    EXPECT_EQ(db_client_t::type_from_string("nodb"), db_client_type_none);
+    EXPECT_EQ(db_client_t::type_from_string("CLOUD"), db_client_type_cloud);
 }
 
 TEST(db_client_backend_Test, LocalBackendPreservesSqliteTransactions)
 {
-    std::unique_ptr<db_client_t> client(db_client_create(db_client_type_local));
+    std::unique_ptr<db_client_t> client(db_client_t::create(db_client_type_local));
     ASSERT_NE(client, nullptr);
     EXPECT_EQ(client->get_type(), db_client_type_local);
     EXPECT_TRUE(client->is_persistent());
@@ -61,7 +151,7 @@ TEST(db_client_backend_Test, LocalBackendPreservesSqliteTransactions)
 
 TEST(db_client_backend_Test, NoDatabaseBackendRemainsInMemoryOnly)
 {
-    std::unique_ptr<db_client_t> client(db_client_create(db_client_type_none));
+    std::unique_ptr<db_client_t> client(db_client_t::create(db_client_type_none));
     ASSERT_NE(client, nullptr);
     EXPECT_EQ(client->get_type(), db_client_type_none);
     EXPECT_FALSE(client->is_persistent());
@@ -77,7 +167,7 @@ TEST(db_client_backend_Test, NoDatabaseBackendRemainsInMemoryOnly)
 
 TEST(db_client_backend_Test, CloudBackendFailsUntilImplemented)
 {
-    std::unique_ptr<db_client_t> client(db_client_create(db_client_type_cloud));
+    std::unique_ptr<db_client_t> client(db_client_t::create(db_client_type_cloud));
     ASSERT_NE(client, nullptr);
     EXPECT_EQ(client->get_type(), db_client_type_cloud);
     EXPECT_NE(client->init(nullptr), 0);
