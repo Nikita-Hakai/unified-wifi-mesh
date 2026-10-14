@@ -1529,6 +1529,85 @@ int em_agent_t::refresh_onewifi_subdoc(const char * log_name, const webconfig_su
     return m_data_model.refresh_onewifi_subdoc(desc, &m_bus_hdl, log_name, type);
 }
 
+bool em_agent_t::refresh_current_radio_data(const unsigned char *ruid)
+{
+    if (ruid == nullptr) {
+        return false;
+    }
+
+    const auto has_current_radio_channel = [this, ruid]() {
+        for (unsigned int index = 0; index < m_data_model.get_num_op_class(); ++index) {
+            em_op_class_info_t *op_class = m_data_model.get_op_class_info(index);
+            if (op_class->id.type == em_op_class_type_current &&
+                memcmp(op_class->id.ruid, ruid, sizeof(mac_address_t)) == 0 &&
+                op_class->op_class != 0 && op_class->channel != 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (has_current_radio_channel()) {
+        return true;
+    }
+
+    wifi_bus_desc_t *desc = get_bus_descriptor();
+    raw_data_t data = {};
+    if (desc == nullptr || desc->bus_data_get_fn == nullptr) {
+        return false;
+    }
+
+    bus_error_t status = desc->bus_data_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data);
+    if (status != bus_error_success || data.raw_data.bytes == nullptr) {
+        em_printfout("Failed to read current OneWifi radio data: %d", status);
+        if (data.raw_data.bytes != nullptr) {
+            if (desc->bus_data_free_fn != nullptr) {
+                desc->bus_data_free_fn(&data);
+            } else {
+                free(data.raw_data.bytes);
+            }
+        }
+        return false;
+    }
+
+    dm_easy_mesh_agent_t radio_snapshot;
+    radio_snapshot.translate_onewifi_dml_data(reinterpret_cast<char *>(data.raw_data.bytes));
+    if (desc->bus_data_free_fn != nullptr) {
+        desc->bus_data_free_fn(&data);
+    } else {
+        free(data.raw_data.bytes);
+    }
+
+    unsigned int num_op_class = m_data_model.get_num_op_class();
+    for (unsigned int index = 0; index < radio_snapshot.get_num_op_class(); ++index) {
+        em_op_class_info_t *snapshot_op_class = radio_snapshot.get_op_class_info(index);
+        if (snapshot_op_class->id.type != em_op_class_type_current ||
+            memcmp(snapshot_op_class->id.ruid, ruid, sizeof(mac_address_t)) != 0 ||
+            snapshot_op_class->op_class == 0 || snapshot_op_class->channel == 0) {
+            continue;
+        }
+
+        unsigned int existing_index = 0;
+        for (; existing_index < num_op_class; ++existing_index) {
+            em_op_class_info_t *existing_op_class = m_data_model.get_op_class_info(existing_index);
+            if (existing_op_class->id.type == em_op_class_type_current &&
+                memcmp(existing_op_class->id.ruid, ruid, sizeof(mac_address_t)) == 0) {
+                break;
+            }
+        }
+
+        if (existing_index == num_op_class) {
+            if (num_op_class >= EM_MAX_OPCLASS) {
+                break;
+            }
+            m_data_model.set_num_op_class(++num_op_class);
+        }
+        *m_data_model.get_op_class_info(existing_index) = *snapshot_op_class;
+    }
+
+    return has_current_radio_channel();
+}
+
 bool em_agent_t::send_backhaul_action_frame(uint8_t dest_mac[ETH_ALEN], uint8_t *action_frame, size_t action_frame_len, unsigned int frequency, unsigned int wait_time_ms) {
 
 

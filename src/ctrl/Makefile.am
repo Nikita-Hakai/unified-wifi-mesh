@@ -24,7 +24,7 @@ hardware_platform = i686-linux-gnu
 
 # uwm-private-ext.mk expects ONEWIFI_EM_HOME (only set by build/makefile.inc for plain make)
 ONEWIFI_EM_HOME = $(top_srcdir)
--include $(top_srcdir)/uwm-private-ext/uwm-private-ext.mk
+include $(top_srcdir)/uwm-private-ext/uwm-private-ext.mk
 
 bin_PROGRAMS = onewifi_em_ctrl
 if EM_UNITTEST

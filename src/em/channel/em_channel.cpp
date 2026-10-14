@@ -1985,7 +1985,14 @@ int em_channel_t::handle_channel_sel_req(unsigned char *buff, unsigned int len)
         // (We cannot rely on process_state() being called for em_state_agent_channel_report_pending
         // because that path is only dispatched for op_channel_report/channel_pref_query commands.)
         em_printfout("Passive mode: skipping channel change to OneWifi, sending operating channel report with current channel");
-        send_operating_channel_report_msg();
+        if (!get_mgr()->refresh_current_radio_data(get_radio_interface_mac())) {
+            em_printfout("Could not refresh current operating channel for radio %s",
+                util::mac_to_string(get_radio_interface_mac()).c_str());
+        }
+        if (send_operating_channel_report_msg() < 0) {
+            em_printfout("Warning: Operating Channel Report failed for radio %s",
+                util::mac_to_string(get_radio_interface_mac()).c_str());
+        }
         set_state(em_state_agent_configured);
         return 0;
     }

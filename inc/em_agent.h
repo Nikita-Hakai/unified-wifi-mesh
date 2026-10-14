@@ -416,6 +416,8 @@ public:
 	 */
 	int refresh_onewifi_subdoc(const char *log_name, const webconfig_subdoc_type_t type) override;
 
+    bool refresh_current_radio_data(const unsigned char *ruid) override;
+
     
 	/**
 	 * @brief Send an action frame

@@ -122,7 +122,7 @@ int lq_ipc_send_wei_data(uint32_t msg_type, const stats_arg_t *entries, uint32_t
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, LQ_STATS_SOCKET_PATH, sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, LQ_STATS_EM_SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
     size_t data_sz  = static_cast<size_t>(count) * sizeof(stats_arg_t);
     size_t alloc_sz = sizeof(lq_tlv_t) + data_sz;
@@ -150,7 +150,7 @@ int lq_ipc_send_wei_data(uint32_t msg_type, const stats_arg_t *entries, uint32_t
 
         int err = errno;
         em_printfout("%s:%d [UDS-SEND] sendto(%s) failed: %s (attempt %d)",
-            __func__, __LINE__, LQ_STATS_SOCKET_PATH, strerror(err), attempt + 1);
+            __func__, __LINE__, LQ_STATS_EM_SOCKET_PATH, strerror(err), attempt + 1);
 
         /* Re-open socket and retry once if receiver restarted or socket dropped */
         if (attempt == 0 && (err == ENOENT || err == ECONNREFUSED || err == EAGAIN)) {

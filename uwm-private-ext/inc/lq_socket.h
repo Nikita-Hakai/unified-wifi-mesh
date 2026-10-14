@@ -5,7 +5,10 @@
 #include <stddef.h>  /* Defines size_t */
 #include "wifi_base.h"
 
+/* OneWifi publishes local link-quality stats here; the EM agent listener binds it. */
 #define LQ_STATS_SOCKET_PATH "/tmp/linkquality_stats.sock"
+/* EM controller forwards aggregated stats here; the WEI app binds it (fed only via controller). */
+#define LQ_STATS_EM_SOCKET_PATH "/tmp/linkquality_stats_em.sock"
 
 #define LQ_IPC_MSG_PERIODIC_STATS    1
 #define LQ_IPC_MSG_DISCONNECT        2

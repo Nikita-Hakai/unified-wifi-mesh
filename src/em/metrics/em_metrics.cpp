@@ -37,12 +37,14 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <openssl/rand.h>
+#include <set>
 #include "em_metrics.h"
 #include "em_msg.h"
 #include "dm_easy_mesh.h"
 #include "em_cmd.h"
 #include "util.h"
 #include "em.h"
+#include "em_mgr.h"
 #include "em_cmd_exec.h"
 #include "dm_easy_mesh_agent.h"
 #include "em_cmd_unassoc_sta_query.h"
@@ -973,7 +975,7 @@ int em_metrics_t::handle_link_stats_alarm_rprt_tlv(unsigned char *buff, size_t l
     return 0;
 }
 
-int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int len)
+int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int len, em_profile_type_t peer_profile)
 {
     em_tlv_t *tlv, *tlv_start;
     size_t tmp_len, base_len;
@@ -983,14 +985,16 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
 
     dm = get_data_model();
 
-    if (em_msg_t(em_msg_type_ap_metrics_rsp, get_profile_type(), buff, len).validate(errors) == 0) {
+    em_profile_type_t validation_profile = (peer_profile == em_profile_type_reserved) ? em_profile_type_1 : peer_profile;
+
+    if (em_msg_t(em_msg_type_ap_metrics_rsp, validation_profile, buff, len).validate(errors) == 0) {
         em_printfout("%s:%d: AP Metrics metrics response msg validation failed\n", __func__, __LINE__);
-        //return -1;
+        return -1;
     }
 
     if (len < sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)) {
         em_printfout("Frame shorter than the 1905 headers");
-        //return -1;
+        return -1;
     }
 
     tlv_start =  reinterpret_cast<em_tlv_t *> (buff + sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t));
@@ -1059,7 +1063,7 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
                         em_printfout("unknown Airties vendor tlv_id 0x%04x, skipping TLV", tlv_id);
                     }
                 } else {
-                    if (handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, len) != 0) {
+                    if (handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, len, true) != 0) {
                         em_printfout("assoc_sta_vendor_link_metrics_tlv failed, skipping TLV");
                     }
                 }
@@ -2802,14 +2806,19 @@ void em_metrics_t::process_msg(unsigned char *data, unsigned int len)
             }
             break;
 
-        case em_msg_type_ap_metrics_rsp:
+        case em_msg_type_ap_metrics_rsp: {
             em_radios.clear();
             get_mgr()->get_all_em_for_al_mac(hdr->src, em_radios);
+            em_profile_type_t peer_profile = em_radios.empty() ? em_profile_type_reserved :
+                em_radios.front()->get_data_model()->get_device()->get_peer_profile();
+            std::set<dm_easy_mesh_t *> handled_dms;
             for (auto &em : em_radios) {
-                em->handle_ap_metrics_response(data, len);
-                break;
+                if (handled_dms.insert(em->get_data_model()).second) {
+                    em->handle_ap_metrics_response(data, len, peer_profile);
+                }
             }
             break;
+        }
         case em_msg_type_unassoc_sta_link_metrics_query:
             handle_unassoc_sta_link_metrics_query(data, len);
             break;

@@ -39,7 +39,7 @@ public:
                               unsigned int        *tlv_val_len) override;
 
 private:
-    void publish_wei_app(stats_arg_t wei_data);
+    void publish_wei_app(uint32_t msg_type, stats_arg_t wei_data);
 };
 
 #endif // VENDOR_WEI_H

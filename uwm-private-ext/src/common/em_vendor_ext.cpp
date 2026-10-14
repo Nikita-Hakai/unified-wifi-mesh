@@ -186,6 +186,25 @@ int em_vendor_wei_t::handle_vendor_tlv_ext(const unsigned char *tlv_value,
         static_cast<em_vendor_priv_attr_id_t>(vendor_data_ptr->vendor_data[0]);
     em_printfout("  wei priv_attr_id [%d]", priv_attr_id);
 
+    uint32_t msg_type;
+    switch (priv_attr_id) {
+    case em_vendor_priv_attr_id_wei_periodic_stats:
+        msg_type = LQ_IPC_MSG_PERIODIC_STATS;
+        break;
+    case em_vendor_priv_attr_id_wei_disconnect:
+        msg_type = LQ_IPC_MSG_DISCONNECT;
+        break;
+    case em_vendor_priv_attr_id_wei_rapid_disconnect:
+        msg_type = LQ_IPC_MSG_RAPID_DISCONNECT;
+        break;
+    case em_vendor_priv_attr_id_wei_caffinity_event:
+        msg_type = LQ_IPC_MSG_CAFFINITY_EVENT;
+        break;
+    default:
+        em_printfout("Unsupported WEI private attribute ID: %u", vendor_data_ptr->vendor_data[0]);
+        return 0;
+    }
+
     // Unpack the byte-wise, network-byte-order wire payload back into the native struct.
     stats_arg_t wei_data_storage;
     stats_arg_unpack(vendor_data_ptr->vendor_data + 1, &wei_data_storage);
@@ -195,12 +214,8 @@ int em_vendor_wei_t::handle_vendor_tlv_ext(const unsigned char *tlv_value,
     dm_easy_mesh_t::string_to_macbytes(const_cast<char *>(wei_data->mac_str), sta_mac);
 
     em_printfout("  wei sta_mac[%s]", wei_data->mac_str);
-    dm_sta_t *sta = dm->get_first_sta(sta_mac);
-
-    if (sta == NULL) {
-        em_printfout("  sta not found for mac[%s]", wei_data->mac_str);
-        return 0;
-    }
+    dm_sta_t *sta = dm == nullptr ? nullptr : dm->get_first_sta(sta_mac);
+    bool sta_found = false;
     while (sta != NULL) {
         em_printfout("  dm sta[%s] vs . mac[%s]", util::mac_to_string(sta->m_sta_info.id).c_str(),
                      wei_data->mac_str);
@@ -241,26 +256,26 @@ int em_vendor_wei_t::handle_vendor_tlv_ext(const unsigned char *tlv_value,
                 wei_data->total_connected_time.tv_sec,
                 wei_data->total_disconnected_time.tv_sec);
 
+            sta_found = true;
             break;
         }
         sta = dm->get_next_sta(sta_mac, const_cast<dm_sta_t*>(sta));
     }
 
-    if(sta == NULL) {
-        em_printfout("sta[%s] not found", wei_data->mac_str);
-        //todo: handle this case, shouldnot return, should goto next after incrementing
-        return -1;
+    if (!sta_found) {
+        em_printfout("STA [%s] not in current model; forwarding %s event",
+            wei_data->mac_str, lq_msg_type_str(msg_type));
     }
 
     // save the data?
     // no reqs to save, directly publish to wei_app.
 
-    publish_wei_app(*wei_data);
+    publish_wei_app(msg_type, *wei_data);
     return 0;
 }
 
-void em_vendor_wei_t::publish_wei_app(stats_arg_t wei_data) {
-    em_printfout("Publishing wei app for sta[%s]", wei_data.mac_str);
+void em_vendor_wei_t::publish_wei_app(uint32_t msg_type, stats_arg_t wei_data) {
+    em_printfout("Publishing %s for sta[%s]", lq_msg_type_str(msg_type), wei_data.mac_str);
     //shoul dbe non blocking?
-    lq_ipc_send_wei_data(LQ_IPC_MSG_PERIODIC_STATS, &wei_data, 1);
+    lq_ipc_send_wei_data(msg_type, &wei_data, 1);
 }

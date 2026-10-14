@@ -934,6 +934,9 @@ int em_capability_t::handle_client_cap_report(unsigned char *buff, unsigned int 
         dm->apply_sta_cap_to_maps(key, &sta_info);
     }
 
+    // Re-arm the publish flag so this client's topo_publish isn't skipped: in the
+    // serialized multi-client flow a prior client's topo_publish already cleared it.
+    dm->set_topo_state(true);
     dm->set_db_cfg_param(db_cfg_type_sta_list_update, "");
     return 0;
 }
@@ -1607,7 +1610,7 @@ int em_capability_t::handle_ap_cap_report(unsigned char *buff, unsigned int len)
                 adv += sizeof(em_ap_radio_advanced_cap_t);
             }
         } else if (tlv->type == em_tlv_type_vendor_specific) {
-            em_vendor_specific_v_t *vendor_tlv = reinterpret_cast<em_vendor_specific_v_t *> (tlv->value);
+            em_vendor_specific_t *vendor_tlv = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
             uint16_t value_len = ntohs(tlv->len);
             dm_easy_mesh_t  *dm;
             dm = get_data_model();
@@ -1617,7 +1620,7 @@ int em_capability_t::handle_ap_cap_report(unsigned char *buff, unsigned int len)
                 memcpy(&tlv_id, vendor_tlv->data, sizeof(tlv_id));
                 tlv_id = ntohs(tlv_id);
                 if (tlv_id == em_tlv_type_radio_capability) {
-                    if (value_len < sizeof(em_radio_capability_vendor_t) + sizeof(tlv_id) + sizeof(em_vendor_specific_v_t)) {
+                    if (value_len < sizeof(em_radio_capability_vendor_t) + sizeof(tlv_id) + sizeof(em_vendor_specific_t)) {
                         em_printfout("Invalid TLV length for em_radio_capability_vendor_t");
                         return -1;
                     }
