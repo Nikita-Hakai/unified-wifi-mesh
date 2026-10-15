@@ -1113,7 +1113,7 @@ int em_configuration_t::create_airties_device_info_tlv(unsigned char *buff, size
         return 0;
     }
 
-    em_vendor_specific_v_t *vendor = reinterpret_cast<em_vendor_specific_v_t *> (buff);
+    em_vendor_specific_t *vendor = reinterpret_cast<em_vendor_specific_t *> (buff);
     memcpy(reinterpret_cast<unsigned char *> (vendor->vendor_oui), airties_vendor_oui, EM_VENDOR_OUI_SIZE);
 
     uint16_t tlv_type = htons(static_cast<uint16_t> (em_tlv_type_airties_device_info));
@@ -1217,7 +1217,7 @@ int em_configuration_t::handle_airties_device_info_tlv(unsigned char *buff, unsi
 
 int em_configuration_t::handle_vendor_specific_tlv(unsigned char *buff, unsigned int len)
 {
-    em_vendor_specific_v_t *vendor = reinterpret_cast<em_vendor_specific_v_t *> (buff);
+    em_vendor_specific_t *vendor = reinterpret_cast<em_vendor_specific_t *> (buff);
 
     if (len >= (EM_VENDOR_OUI_SIZE + sizeof(uint16_t))) {
         /* Check for Airties TLV, OUI(3) + TLV_ID(2) */
@@ -4724,7 +4724,6 @@ int em_configuration_t::handle_autoconfig_wsc_m2(unsigned char *buff, unsigned i
     dm_network_t network;
     em_raw_hdr_t *hdr = reinterpret_cast<em_raw_hdr_t *> (buff);
 
-    if (em_msg_t(em_msg_type_autoconf_wsc, get_peer_profile(hdr->src), buff, len).validate(errors) == 0) {
     /* len must cover the fixed headers, or the subtraction below wraps and the TLV walk overruns. */
     if (len < static_cast<unsigned int> (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))) {
         em_printfout("Error: Message too short for header, len:%u", len);
