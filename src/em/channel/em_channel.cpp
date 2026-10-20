@@ -43,6 +43,7 @@
 #include "em_msg.h"
 #include "em_cmd_exec.h"
 #include "util.h"
+#include "em_ext_hooks.h"
 
 /*
  * Bit mask for BSS Color + BSS Load Present field in Channel Scan Report Message.
@@ -1671,7 +1672,9 @@ int em_channel_t::handle_op_channel_report(unsigned char *buff, unsigned int len
     dm_easy_mesh_t::macbytes_to_string(ruid, ruid_str);
     em_t *radio_em = reinterpret_cast<em_t *>(hash_map_get(get_mgr()->m_em_map, ruid_str));
     if (radio_em) {
-        if(radio_em->get_state() == em_state_ctrl_channel_selected){
+        // OCR can also arrive while the radio is still in the channel select pending state.
+        if (radio_em->get_state() == em_state_ctrl_channel_selected ||
+            radio_em->get_state() == em_state_ctrl_channel_select_pending) {
             radio_em->set_state(em_state_ctrl_configured);
             em_printfout("Set em_state_ctrl_configured for radio %s", ruid_str);
         }
@@ -1972,9 +1975,14 @@ int em_channel_t::handle_channel_sel_req(unsigned char *buff, unsigned int len)
     }
 
 	op_class.freq_band = get_band();
-   
+
+	if (em_get_ext_hooks()->intercept_agent_event(static_cast<em_t *> (this), em_bus_event_type_channel_sel_req,
+			reinterpret_cast<unsigned char *> (&op_class), sizeof(op_class_channel_sel))) {
+		return 0;
+	}
+
 	get_mgr()->io_process(em_bus_event_type_channel_sel_req, reinterpret_cast<unsigned char *> (&op_class), sizeof(op_class_channel_sel));
-    
+
 	printf("%s:%d Received channel selection request \n",__func__, __LINE__);
 	set_state(em_state_agent_channel_select_configuration_pending);
     return 0;

@@ -329,8 +329,12 @@ public:
 	 * @note Currently, this function is not implemented and will always return -2.
 	 */
 	virtual int refresh_onewifi_subdoc(const char *log_name, const webconfig_subdoc_type_t type) {
-        printf("refresh_onewifi_subdoc not implemented\n");
         return -2;
+    }
+
+    virtual bool refresh_current_radio_data(const unsigned char *) {
+        printf("refresh_current_radio_data not implemented\n");
+        return false;
     }
 
     

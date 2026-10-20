@@ -51,6 +51,7 @@
 #ifdef AL_SAP
 #include "al_service_access_point.h"
 #endif
+#include "em_ext_hooks.h"
 
 em_ctrl_t *em_ctrl_t::s_em_ctrl = NULL;
 em_network_topo_t *g_network_topology = NULL;
@@ -1503,6 +1504,11 @@ AlServiceAccessPoint* em_ctrl_t::al_sap_register(const std::string& data_socket_
 int main(int argc, const char *argv[])
 {
     em_ctrl_t  *em_ctrl = em_ctrl_t::get_em_ctrl_instance();
+
+    if (em_get_ext_hooks()->process_cli_args(&argc, argv) == false) {
+        return -1;
+    }
+
 #ifdef AL_SAP
     const char* data_socket_path = "/tmp/al_em_ctrl_data_socket";
     const char* control_socket_path = "/tmp/al_em_ctrl_control_socket";
