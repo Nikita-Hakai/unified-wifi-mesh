@@ -1176,7 +1176,7 @@ void em_agent_t::send_beacon_query(em_bus_event_t *evt)
     beacon_req->channel = query_params->channel_num;
 
     // channel_num==0 means current channel; 255 is wildcard (all channels).
-    // Passive mode avoids probe-request transmission on off-channel/DFS channels.
+    // Avoid probe-request transmission on off-channel/DFS channels.
     bool is_off_channel = true;
     if (query_params->channel_num == 0) {
         is_off_channel = false;
@@ -2213,7 +2213,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 				if (em->is_matching_freq_band(&band) == true) {
 					if ((em->get_state() != em_state_agent_autoconfig_renew_pending) && (em->get_state() !=em_state_agent_wsc_m2_pending) && 
                         (em->get_state() != em_state_agent_owconfig_pending) && (em->get_state() != em_state_agent_1905_securing) &&
-                        (em->get_state() != em_state_agent_wsc_m2_config_skipping)) {
+                        (em->get_state() != em_state_agent_wsc_m2_processed)) {
 						found = true;
 						break;
 					} else {
@@ -2267,7 +2267,9 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 				if (em->is_matching_freq_band(&band) == true) {
 					/* Accept renew in owconfig_pending too: the apply confirmation
 					 * never arrived and renew is the mechanism to recover that. */
-					if ((em->get_state() != em_state_agent_autoconfig_renew_pending) && (em->get_state() !=em_state_agent_wsc_m2_pending)) {
+					if ((em->get_state() != em_state_agent_autoconfig_renew_pending) &&
+					    (em->get_state() != em_state_agent_wsc_m2_pending) &&
+					    (em->get_state() != em_state_agent_wsc_m2_processed)) {
 						em_printfout("Found matching band %d for autoconfig renew request, received controller AL MAC is %s", band, al_mac_str);
 						found = true;
 						break;

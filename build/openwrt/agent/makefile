@@ -127,10 +127,20 @@ AGENT_SOURCES = $(wildcard $(ONEWIFI_EM_SRC)/em/*.cpp) \
 	$(wildcard $(ONEWIFI_EM_SRC)/utils/*.cpp) \
 	
 
+ifneq ($(strip $(EASYMESH_PRIVATE_EXT_DIR)),)
+EASYMESH_PRIVATE_EXT_SOURCES := $(wildcard $(EASYMESH_PRIVATE_EXT_DIR)/src/*.cpp)
+ifeq ($(strip $(EASYMESH_PRIVATE_EXT_SOURCES)),)
+$(error EASYMESH_PRIVATE_EXT_DIR is set but contains no src/*.cpp files)
+endif
+CXXFLAGS += -I$(EASYMESH_PRIVATE_EXT_DIR)/inc
+EASYMESH_PRIVATE_EXT_OBJECTS := $(addprefix $(OBJDIR)/private_ext_,$(notdir $(EASYMESH_PRIVATE_EXT_SOURCES:.cpp=.o)))
+endif
+
 -include $(ONEWIFI_EM_HOME)/uwm-private-ext/uwm-private-ext.mk
 AGENT_SOURCES += $(UWM_PRIVATE_EXT_AGENT_SOURCES)
 
-AGENT_OBJECTS = $(AGENT_SOURCES:.cpp=.o)
+AGENT_CORE_OBJECTS = $(AGENT_SOURCES:.cpp=.o)
+AGENT_OBJECTS = $(AGENT_CORE_OBJECTS) $(EASYMESH_PRIVATE_EXT_OBJECTS)
 GENERIC_OBJECTS = $(GENERIC_SOURCES:.c=.o) 
 ALLOBJECTS = $(AGENT_OBJECTS) $(GENERIC_OBJECTS)
 
@@ -142,7 +152,11 @@ $(PROGRAM): $(ALLOBJECTS)
 $(GENERIC_OBJECTS): %.o: %.c
 	$(CC) $(CXXFLAGS) -o $@ -c $<
 
-$(AGENT_OBJECTS): %.o: %.cpp
+$(AGENT_CORE_OBJECTS): %.o: %.cpp
+	$(CXX) $(CXXFLAGS) -o $@ -c $<
+
+$(OBJDIR)/private_ext_%.o: $(EASYMESH_PRIVATE_EXT_DIR)/src/%.cpp
+	mkdir -p $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 # Clean target: "make -f Makefile.Linux clean" to remove unwanted objects and executables.

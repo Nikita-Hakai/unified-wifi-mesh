@@ -48,6 +48,7 @@
 #include "util.h"
 #include "wifi_util.h"
 #include "em_ctrl_hooks.h"
+#include "em_ext_hooks.h"
 
 #ifdef AL_SAP
 #include "al_service_access_point.h"
@@ -1572,19 +1573,13 @@ int main(int argc, const char *argv[])
 {
     em_ctrl_t  *em_ctrl = em_ctrl_t::get_em_ctrl_instance();
     const char *data_model_path = NULL;
-    bool passive = false;
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--passive") == 0) {
-            passive = true;
-        } else {
-            data_model_path = argv[i];
-        }
+    if (em_get_ext_hooks()->process_cli_args(&argc, argv) == false) {
+        return -1;
     }
 
-    if (passive == true) {
-        em_ctrl->set_passive(true);
-        em_printfout("Controller started in passive mode");
+    for (int i = 1; i < argc; i++) {
+        data_model_path = argv[i];
     }
 
 #ifdef AL_SAP

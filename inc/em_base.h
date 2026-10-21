@@ -2314,8 +2314,6 @@ typedef enum {
     vendor_ext_attr_id_policy_alarm,    // data of type em_link_stats_alarm_cfg_t
     vendor_ext_attr_id_policy_cfg_client_filter,    // data of type em_client_filters_cfg_t
     vendor_ext_attr_id_link_report,     // data of type em_link_report_t
-    vendor_ext_attr_id_passive,         // 1 byte: 0x01 indicates controller is in passive mode
-
     vendor_ext_attr_id_max
 } vendor_ext_attr_id_t;
 
@@ -2325,7 +2323,7 @@ typedef enum {
     em_state_agent_1905_securing,
     em_state_agent_autoconfig_rsp_pending,
     em_state_agent_wsc_m2_pending,
-    em_state_agent_wsc_m2_config_skipping,
+    em_state_agent_wsc_m2_processed,
     em_state_agent_owconfig_pending,
     em_state_agent_onewifi_bssconfig_ind,
 	em_state_agent_autoconfig_renew_pending,

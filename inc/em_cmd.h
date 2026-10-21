@@ -41,9 +41,9 @@ public:
     dm_easy_mesh_t  m_data_model;
     struct timeval  m_start_time;
 
-    unsigned int m_orch_op_idx;
+    unsigned int m_orch_op_idx = 0;
     em_orch_desc_t  m_orch_desc[EM_MAX_CMD];
-    unsigned int m_num_orch_desc;
+    unsigned int m_num_orch_desc = 0;
     unsigned int m_rd_op_class;
     unsigned int m_rd_channel;
     unsigned int m_db_cfg_type;
