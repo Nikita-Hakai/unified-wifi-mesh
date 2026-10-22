@@ -182,7 +182,7 @@ void em_vendor_t::process_agent_state()
     em_printfout("WEI debug: process_agent_state entered, cmd type:%d processed:%d", cmd->get_type(), cmd->processed);
 
     switch (cmd->get_type()) {
-        case em_cmd_type_generic_data:
+        case em_cmd_type_vendor_data:
             if (cmd->processed == false) {
                 em_printfout("WEI debug: calling send_vendor_msg()");
                 send_vendor_msg();

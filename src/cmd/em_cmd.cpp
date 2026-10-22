@@ -682,7 +682,7 @@ const char *em_cmd_t::get_cmd_type_str(em_cmd_type_t type)
         CMD_TYPE_2S(em_cmd_type_get_link_quality_report)
         CMD_TYPE_2S(em_cmd_type_unassoc_sta_query)
         CMD_TYPE_2S(em_cmd_type_unassoc_sta_result)
-        CMD_TYPE_2S(em_cmd_type_generic_data)
+        CMD_TYPE_2S(em_cmd_type_vendor_data)
         CMD_TYPE_2S(em_cmd_type_client_assoc_ctrl_req)
 
         default:
@@ -846,8 +846,8 @@ em_cmd_type_t em_cmd_t::bus_2_cmd_type(em_bus_event_type_t etype)
             type = em_cmd_type_set_channel;
             break;
 
-        case em_bus_event_type_wei_app_data:
-            type = em_cmd_type_generic_data;
+        case em_bus_event_type_vendor_data:
+            type = em_cmd_type_vendor_data;
             break;
 
         case em_bus_event_type_client_assoc_ctrl_req:
@@ -996,4 +996,3 @@ em_cmd_t::~em_cmd_t()
 	deinit();
 	free(m_evt);
 }
-

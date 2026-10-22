@@ -1337,17 +1337,15 @@ void em_agent_t::handle_link_stats_report(em_bus_event_t *evt)
     }
 }
 
-void em_agent_t::handle_wei_app_data(em_bus_event_t *evt)
+void em_agent_t::handle_vendor_data(em_bus_event_t *evt)
 {
     em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
     unsigned int num;
 
-    /* if (m_orch->is_cmd_type_in_progress(evt) == true) {
-        em_printfout("analyze_wei_app_data in progress");
-    } else */ if ((num = static_cast<unsigned int>(m_data_model.analyze_wei_app_data(evt, pcmd))) == 0) {
-        em_printfout("analyze_wei_app_data failed");
+    if ((num = static_cast<unsigned int>(m_data_model.analyze_vendor_data(evt, pcmd))) == 0) {
+        em_printfout("analyze_vendor_data failed");
     } else if (m_orch->submit_commands(pcmd, num) > 0) {
-        em_printfout("Submitted WEI app data cmd for orch");
+        em_printfout("Submitted vendor data cmd for orch");
     }
 }
 
@@ -1474,8 +1472,8 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
             handle_unassoc_sta_result(evt);
             break;
 
-        case em_bus_event_type_wei_app_data:
-            handle_wei_app_data(evt);
+        case em_bus_event_type_vendor_data:
+            handle_vendor_data(evt);
             break;
 
         default:

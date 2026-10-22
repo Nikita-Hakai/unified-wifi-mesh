@@ -2438,7 +2438,7 @@ typedef enum {
     em_cmd_type_get_link_quality_report,
     em_cmd_type_unassoc_sta_query,
     em_cmd_type_unassoc_sta_result,
-    em_cmd_type_generic_data,
+    em_cmd_type_vendor_data,
     em_cmd_type_client_assoc_ctrl_req,
 
     em_cmd_type_max,
@@ -3178,7 +3178,7 @@ typedef enum {
     em_bus_event_type_unassoc_sta_link_metrics_query,
     em_bus_event_type_unassoc_sta_result,
     em_bus_event_type_failed_conn,
-    em_bus_event_type_wei_app_data,
+    em_bus_event_type_vendor_data,
 
     em_bus_event_type_max
 } em_bus_event_type_t;
