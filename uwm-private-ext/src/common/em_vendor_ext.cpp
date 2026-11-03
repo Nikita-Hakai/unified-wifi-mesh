@@ -74,9 +74,9 @@ static size_t stats_arg_pack(const stats_arg_t *h, unsigned char *buf)
     p = wei_put_u32(p, h->status_code);
     p = wei_put_u32(p, static_cast<uint32_t>(h->dhcp_event));
     p = wei_put_u32(p, static_cast<uint32_t>(h->dhcp_msg_type));
-    p = wei_put_bytes(p, h->dhcp_hostname, sizeof(h->dhcp_hostname));
-    p = wei_put_bytes(p, h->dhcp_vendor_class, sizeof(h->dhcp_vendor_class));
-    p = wei_put_bytes(p, h->dhcp_param_list, sizeof(h->dhcp_param_list));
+    //p = wei_put_bytes(p, h->dhcp_hostname, sizeof(h->dhcp_hostname));
+    //p = wei_put_bytes(p, h->dhcp_vendor_class, sizeof(h->dhcp_vendor_class));
+    //p = wei_put_bytes(p, h->dhcp_param_list, sizeof(h->dhcp_param_list));
     p = wei_put_u32(p, h->eapol_m1_count);
     p = wei_put_u32(p, h->eapol_m2_count);
     p = wei_put_u32(p, h->eapol_m3_count);
@@ -119,9 +119,9 @@ static size_t stats_arg_unpack(const unsigned char *buf, stats_arg_t *h)
     p = wei_get_u32(p, &u32); h->status_code = u32;
     p = wei_get_u32(p, &u32); h->dhcp_event = static_cast<int>(u32);
     p = wei_get_u32(p, &u32); h->dhcp_msg_type = static_cast<int>(u32);
-    p = wei_get_bytes(p, h->dhcp_hostname, sizeof(h->dhcp_hostname));
-    p = wei_get_bytes(p, h->dhcp_vendor_class, sizeof(h->dhcp_vendor_class));
-    p = wei_get_bytes(p, h->dhcp_param_list, sizeof(h->dhcp_param_list));
+    //p = wei_get_bytes(p, h->dhcp_hostname, sizeof(h->dhcp_hostname));
+    //p = wei_get_bytes(p, h->dhcp_vendor_class, sizeof(h->dhcp_vendor_class));
+    //p = wei_get_bytes(p, h->dhcp_param_list, sizeof(h->dhcp_param_list));
     p = wei_get_u32(p, &u32); h->eapol_m1_count = u32;
     p = wei_get_u32(p, &u32); h->eapol_m2_count = u32;
     p = wei_get_u32(p, &u32); h->eapol_m3_count = u32;
