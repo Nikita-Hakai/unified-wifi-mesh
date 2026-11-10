@@ -3708,9 +3708,20 @@ int dm_easy_mesh_ctrl_t::analyze_reset(em_bus_event_t *evt, em_cmd_t *pcmd[])
 
     subdoc = &evt->u.subdoc;
 
-
-    dm.decode_config(subdoc, "Reset");
+    if (dm.decode_config(subdoc, "Reset") < 0) {
+        em_printfout("Failed to decode reset config");
+        return -1;
+    }
     //dm.print_config();
+
+    if (memcmp(m_device_info.intf.mac, ZERO_MAC_ADDR, sizeof(mac_address_t)) != 0) {
+        dm.set_ctrl_al_interface_mac(m_device_info.intf.mac);
+        // Name/media are only known if the AL MAC matched a local interface at AL-SAP registration.
+        if (m_device_info.intf.name[0] != '\0') {
+            dm.set_ctrl_al_interface_name(m_device_info.intf.name);
+            dm.set_controller_intf_media(m_device_info.intf.media);
+        }
+    }
 
     dm.set_db_cfg_param(db_cfg_type_network_list_update, "");
     dm.set_db_cfg_param(db_cfg_type_network_ssid_list_update, "");
@@ -5609,36 +5620,55 @@ int dm_easy_mesh_ctrl_t::get_wifi_reset_config(cJSON *parent, char *key)
 {
     cJSON *obj;
     dm_easy_mesh_t dm;
-    em_interface_t *intf;
+    em_interface_t *intf = NULL;
     em_subdoc_info_t *subdoc;
     unsigned char buff[EM_IO_BUFF_SZ];
 
     subdoc = reinterpret_cast<em_subdoc_info_t*>(buff);
 
     if (em_cmd_exec_t::load_params_file("/nvram/Reset.json",  subdoc->buff) < 0) {
-        printf("%s:%d: Failed to load test file\n", __func__, __LINE__);
+        em_printfout("%s:%d: Failed to load test file", __func__, __LINE__);
+        return -1;
+    }
+    dm.init();
+    if (dm.decode_config(subdoc, "Reset") < 0) {
+        em_printfout("Failed to decode reset config");
         return -1;
     }
 
-    dm.init();
-    dm.decode_config(subdoc, "Reset");
-
     const char* platform = dm.get_platform();
 
-    // Prioritize the interface list depending on platform
-    if ((intf = dm.get_prioritized_interface(platform)) == NULL) {
-        intf = dm.get_interface_by_index(0);//Todo: check why index 0 as it is taking brlan0
+    if (platform != NULL) {
+        intf = dm.get_prioritized_interface(platform);
+    }
+    if (intf == NULL && dm.m_num_interfaces > 0) {
+        intf = dm.get_interface_by_index(0);
     }
 
-    dm.set_ctrl_al_interface_mac(intf->mac);
-    dm.set_ctrl_al_interface_name(intf->name);
-    dm.set_controller_id(intf->mac);//Should be set to eth0-virt-peer mac
-    dm.set_controller_intf_media(intf->media);
+    /*
+     * Keep the controller ID tied to the AL-SAP MAC only.
+     * Do not overwrite it with the interface-derived MAC from config.
+     */
+    if (intf == NULL) {
+        em_printfout("%s:%d: No valid interface found", __func__, __LINE__);
+        return -1;
+    }
+    if (memcmp(m_device_info.intf.mac, ZERO_MAC_ADDR, sizeof(mac_address_t)) != 0) {
+        dm.set_ctrl_al_interface_mac(m_device_info.intf.mac);
+    }
+    // Name/media are only known if the AL MAC matched a local interface at AL-SAP registration;
+    // otherwise use the platform-preferred interface.
+    if (m_device_info.intf.name[0] != '\0') {
+        dm.set_ctrl_al_interface_name(m_device_info.intf.name);
+        dm.set_controller_intf_media(m_device_info.intf.media);
+    } else {
+        dm.set_ctrl_al_interface_name(intf->name);
+        dm.set_controller_intf_media(intf->media);
+    }
 
     //dm.print_config();
 
     dm.encode_config(subdoc, "Reset");
-
 
     if ((obj = cJSON_Parse(subdoc->buff)) == NULL) {
         printf("%s:%d: Failed to load test file\n", __func__, __LINE__);
@@ -6606,6 +6636,11 @@ bus_error_t dm_easy_mesh_ctrl_t::apmldcfg_get(char *event_name, raw_data_t *p_da
     return bus_get_cb_fwd(event_name, p_data, apmldcfg_get_inner);
 }
 
+bus_error_t dm_easy_mesh_ctrl_t::apmldcfg_set(char *event_name, raw_data_t *p_data)
+{
+    return bus_set_cb_fwd(event_name, p_data, apmldcfg_set_inner);
+}
+
 bus_error_t dm_easy_mesh_ctrl_t::affap_get(char *event_name, raw_data_t *p_data)
 {
     return bus_get_cb_fwd(event_name, p_data, affap_get_inner);
@@ -6939,6 +6974,23 @@ bus_error_t dm_easy_mesh_ctrl_t::device_get_inner(char *event_name, raw_data_t *
         rc = dm_ctrl->raw_data_set(p_data, sec_cap ? sec_cap->integrity_algo : 0);
     } else if (strcmp(param, "EncryptionAlgorithm") == 0) {
         rc = dm_ctrl->raw_data_set(p_data, sec_cap ? sec_cap->encryption_algo : 0);
+    } else if (strcmp(param, "X_AIRTIES_BootID") == 0) {
+        em_ext_device_info_t *edi = &di->extended_info;
+        rc = dm_ctrl->raw_data_set(p_data, edi->received ? edi->boot_id : 0);
+    } else if (strcmp(param, "X_AIRTIES_ClientID") == 0) {
+        em_ext_device_info_t *edi = &di->extended_info;
+        if (edi->received && edi->client_id_len) {
+            rc = dm_ctrl->raw_data_set(p_data, edi->client_id);
+        } else {
+            rc = dm_ctrl->raw_data_set(p_data, "");
+        }
+    } else if (strcmp(param, "X_AIRTIES_ClientSecret") == 0) {
+        em_ext_device_info_t *edi = &di->extended_info;
+        if (edi->received && edi->client_secret_len) {
+            rc = dm_ctrl->raw_data_set(p_data, edi->client_secret);
+        } else {
+            rc = dm_ctrl->raw_data_set(p_data, "");
+        }
     } else {
         em_printfout("Invalid param: %s", param);
         rc = bus_error_invalid_input;
@@ -7079,6 +7131,19 @@ bus_error_t dm_easy_mesh_ctrl_t::device_tget_inner(char *event_name, raw_data_t 
         dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_DeviceInfo.MemoryStatus.Cached", di->cached_mem);
         dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_DeviceInfo.ProcessStatus.CPUUsage", di->cpu_load);
         dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_DeviceInfo.ProcessStatus.CPUTemperature", di->cpu_temp);
+
+        em_ext_device_info_t *edi = &di->extended_info;
+        dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_BootID", edi->received ? edi->boot_id : 0);
+        if (edi->received && edi->client_id_len) {
+            dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_ClientID", edi->client_id);
+        } else {
+            dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_ClientID", "");
+        }
+        if (edi->received && edi->client_secret_len) {
+            dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_ClientSecret", edi->client_secret);
+        } else {
+            dm_ctrl->property_append_tail(&property, root, idx, "X_AIRTIES_ClientSecret", "");
+        }
 
         snprintf(path, sizeof(path) - 1, "%s%d.Radio.", root, idx);
         dm_ctrl->radio_tget_params(dm, path, &property);
@@ -8734,9 +8799,11 @@ dm_bss_t *dm_easy_mesh_ctrl_t::get_dm_bss(dm_easy_mesh_t *dm, em_radio_info_t *r
     for (unsigned int i = 0; i < dm->get_num_bss(); i++) {
         dm_bss_t *bss = dm->get_bss(i);
         em_bss_info_t *bi = bss->get_bss_info();
-        if (memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0) {
-            ++bcnt;
+        if (memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) != 0 ||
+            memcmp(bi->bssid.mac, ZERO_MAC_ADDR, sizeof(ZERO_MAC_ADDR)) == 0) {
+            continue;
         }
+        ++bcnt;
         if (is_num) {
             if (bcnt == idx) {
                 return bss;
@@ -8829,12 +8896,17 @@ bus_error_t dm_easy_mesh_ctrl_t::bss_get_inner(char *event_name, raw_data_t *p_d
         bi = dm->get_bss_info(i);
         dm_easy_mesh_t::macbytes_to_string(bi->ruid.mac, bss_str);
         dm_easy_mesh_t::macbytes_to_string(ri->id.ruid, radio_str);
-        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0) {
+        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0 &&
+           memcmp(bi->bssid.mac, ZERO_MAC_ADDR, sizeof(ZERO_MAC_ADDR)) != 0) {
             count++;
             if(count == bss_instance) {
                 break;
             }
         }
+    }
+    if (bss_instance < 1 || count != bss_instance) {
+        em_printfout("BSS not found");
+        return bus_error_invalid_namespace;
     }
 
     if (strcmp(param, "BSSID") == 0) {
@@ -8973,6 +9045,7 @@ bus_error_t dm_easy_mesh_ctrl_t::bss_tget_params(dm_easy_mesh_t *dm, const char 
             continue;
         }
         em_bss_info_t *bi = bss->get_bss_info();
+        /* bss_get_inner(), sta_get_inner(), sta_tget_inner() and get_dm_bss() number the rows the same way. */
         if (memcmp(bi->bssid.mac, ZERO_MAC_ADDR, sizeof(ZERO_MAC_ADDR)) == 0 ||
             memcmp(ri->id.ruid, bi->ruid.mac, sizeof(bi->ruid.mac)) != 0) {
             continue;
@@ -9085,12 +9158,17 @@ bus_error_t dm_easy_mesh_ctrl_t::sta_get_inner(char *event_name, raw_data_t *p_d
         bi = dm->get_bss_info(i);
         dm_easy_mesh_t::macbytes_to_string(bi->ruid.mac, bss_str);
         dm_easy_mesh_t::macbytes_to_string(ri->id.ruid, radio_str);
-        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0) {
+        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0 &&
+           memcmp(bi->bssid.mac, ZERO_MAC_ADDR, sizeof(ZERO_MAC_ADDR)) != 0) {
             count++;
             if(count == bss_instance) {
                 break;
             }
         }
+    }
+    if (bss_instance < 1 || count != bss_instance) {
+        em_printfout("BSS not found");
+        return bus_error_invalid_namespace;
     }
 
     name = dm_ctrl->get_table_instance(name, instance, MAX_INSTANCE_LEN, &is_num);
@@ -9229,12 +9307,17 @@ bus_error_t dm_easy_mesh_ctrl_t::sta_tget_inner(char *event_name, raw_data_t *p_
         bi = dm->get_bss_info(i);
         dm_easy_mesh_t::macbytes_to_string(bi->ruid.mac, bss_str);
         dm_easy_mesh_t::macbytes_to_string(ri->id.ruid, radio_str);
-        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0) {
+        if(memcmp(ri->id.ruid, bi->ruid.mac, sizeof(mac_address_t)) == 0 &&
+           memcmp(bi->bssid.mac, ZERO_MAC_ADDR, sizeof(ZERO_MAC_ADDR)) != 0) {
             count++;
             if(count == bss_instance) {
                 break;
             }
         }
+    }
+    if (bss_instance < 1 || count != bss_instance) {
+        em_printfout("BSS not found");
+        return bus_error_invalid_namespace;
     }
 
     rc = dm_ctrl->sta_tget_params(dm, root, bi, &property);
@@ -9317,8 +9400,16 @@ dm_ap_mld_t *dm_easy_mesh_ctrl_t::get_dm_ap_mld(dm_easy_mesh_t *dm, char *instan
 {
     dm_ap_mld_t *ap_mld = NULL;
 
+    if ((dm == NULL) || (instance == NULL) || (instance[0] == '\0')) {
+        return NULL;
+    }
+
     if (is_num) {
-        unsigned int idx = static_cast<unsigned int>(atoi(instance) - 1);
+        int requested_instance = atoi(instance);
+        if (requested_instance <= 0) {
+            return NULL;
+        }
+        unsigned int idx = static_cast<unsigned int>(requested_instance - 1);
         if (idx >= dm->get_num_ap_mld()) {
             return NULL;
         }
@@ -9333,13 +9424,16 @@ dm_ap_mld_t *dm_easy_mesh_ctrl_t::get_dm_ap_mld(dm_easy_mesh_t *dm, char *instan
             continue;
         }
         em_ap_mld_info_t *ami = ap_mld->get_ap_mld_info();
+        if (!ami->mac_addr_valid) {
+            continue;
+        }
         dm_easy_mesh_t::macbytes_to_string(const_cast<unsigned char *> (ami->mac_addr), mac_str);
         if (strcmp(instance, mac_str) == 0) {
             return ap_mld;
         }
     }
 
-    return ap_mld;
+    return NULL;
 }
 
 bus_error_t dm_easy_mesh_ctrl_t::apmld_get_inner(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data)
@@ -9524,6 +9618,155 @@ bus_error_t dm_easy_mesh_ctrl_t::apmldcfg_get_inner(char *event_name, raw_data_t
     }
 
     return rc;
+}
+
+static uint8_t ap_mld_mode_bit_from_param(const char *param)
+{
+    if (strcmp(param, "EMLMREnabled") == 0) return EM_MLO_MODE_EMLMR;
+    if (strcmp(param, "EMLSREnabled") == 0) return EM_MLO_MODE_EMLSR;
+    if (strcmp(param, "STREnabled") == 0) return EM_MLO_MODE_STR;
+    if (strcmp(param, "NSTREnabled") == 0) return EM_MLO_MODE_NSTR;
+    return 0;
+}
+
+static bool ap_mld_mode_is_supported(dm_easy_mesh_t *dm, const em_ap_mld_info_t *ami,
+    uint8_t mode_bit, bool *capability_ready)
+{
+    bool supported = true;
+    bool ready = false;
+    bool mode_supported;
+    unsigned int i;
+    unsigned int radio;
+    em_radio_cap_info_t *capability;
+    em_radio_cap_info_t *candidate;
+    const em_wifi7_mlo_cap_support_tlv_t *mlo_cap;
+
+    if (capability_ready != NULL) {
+        *capability_ready = false;
+    }
+    if ((dm == NULL) || (ami == NULL) || (ami->num_affiliated_ap == 0)) {
+        return false;
+    }
+
+    for (i = 0; i < ami->num_affiliated_ap; i++) {
+        capability = NULL;
+        for (radio = 0; radio < dm->get_num_radios(); radio++) {
+            candidate = dm->get_radio_cap_info(radio);
+            if ((candidate != NULL) &&
+                (memcmp(candidate->ruid.mac, ami->affiliated_ap[i].ruid.mac,
+                    sizeof(mac_address_t)) == 0)) {
+                capability = candidate;
+                break;
+            }
+        }
+
+        if (capability == NULL) {
+            supported = false;
+            continue;
+        }
+        ready = true;
+
+        mlo_cap = &capability->wifi7_cap.mlo_cap_support;
+        mode_supported = false;
+        if (mode_bit == EM_MLO_MODE_STR) mode_supported = mlo_cap->ap_str_support;
+        else if (mode_bit == EM_MLO_MODE_NSTR) mode_supported = mlo_cap->ap_nstr_support;
+        else if (mode_bit == EM_MLO_MODE_EMLSR) mode_supported = mlo_cap->ap_emlsr_support;
+        else if (mode_bit == EM_MLO_MODE_EMLMR) mode_supported = mlo_cap->ap_emlmr_support;
+        supported = supported && mode_supported;
+    }
+
+    if (capability_ready != NULL) {
+        *capability_ready = ready;
+    }
+    return ready && supported;
+}
+
+bus_error_t dm_easy_mesh_ctrl_t::apmldcfg_set_inner(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data)
+{
+    (void) user_data;
+    const char *name = event_name;
+    const char *param;
+    char instance[MAX_INSTANCE_LEN] = { 0 };
+    bool is_num;
+    bool value;
+    uint8_t mode_bit;
+    bool capability_ready;
+    bool mode_supported;
+    bool *field;
+    dm_easy_mesh_ctrl_t *dm_ctrl;
+    dm_easy_mesh_t *dm;
+    dm_ap_mld_t *ap_mld;
+    em_ap_mld_info_t *ami;
+
+    if (!name || !p_data) {
+        return bus_error_invalid_input;
+    }
+
+    if (p_data->data_type != bus_data_type_boolean) {
+        em_printfout("Invalid data type for %s", name);
+        return bus_error_invalid_input;
+    }
+    value = p_data->raw_data.b;
+
+    param = strrchr(name, '.');
+    if (param == NULL) {
+        return bus_error_invalid_input;
+    }
+    ++param;
+
+    dm_ctrl = em_ctrl_t::get_em_ctrl_instance()->get_dm_ctrl();
+
+    /* Extract device instance (numeric or alias) and find the dm object for
+     * that device instance */
+    name += sizeof(DATAELEMS_NETWORK);
+    name = dm_ctrl->get_table_instance(name, instance, MAX_INSTANCE_LEN, &is_num);
+    dm = dm_ctrl->get_dm_easy_mesh(instance, is_num);
+    if (dm == NULL) {
+        em_printfout("Device not found");
+        return bus_error_invalid_namespace;
+    }
+
+    /* Extract ap_mld instance (numeric or alias), find the ap_mld dm object
+     * for that instance, and finally get info struct for ap_mld dm object */
+    name = dm_ctrl->get_table_instance(name, instance, MAX_INSTANCE_LEN, &is_num);
+    ap_mld = dm_ctrl->get_dm_ap_mld(dm, instance, is_num);
+    if (ap_mld == NULL) {
+        em_printfout("APMLD not found");
+        return bus_error_invalid_namespace;
+    }
+    ami = ap_mld->get_ap_mld_info();
+    mode_bit = ap_mld_mode_bit_from_param(param);
+    if (mode_bit == 0) {
+        em_printfout("Invalid param: %s", param);
+        return bus_error_destination_not_found;
+    }
+
+    capability_ready = false;
+    mode_supported = ap_mld_mode_is_supported(dm, ami, mode_bit, &capability_ready);
+    if (value && !capability_ready) {
+        em_printfout("AP-MLD %s rejected: device capabilities are not available", param);
+        return bus_error_invalid_operation;
+    }
+    if (value && !mode_supported) {
+        em_printfout("AP-MLD %s rejected: mode is not supported by all affiliated radios", param);
+        return bus_error_invalid_input;
+    }
+
+    field = NULL;
+    if (mode_bit == EM_MLO_MODE_EMLMR) field = &ami->emlmr;
+    else if (mode_bit == EM_MLO_MODE_EMLSR) field = &ami->emlsr;
+    else if (mode_bit == EM_MLO_MODE_STR) field = &ami->str;
+    else if (mode_bit == EM_MLO_MODE_NSTR) field = &ami->nstr;
+
+    if (*field == value) {
+        em_printfout("AP-MLD ssid=\"%s\" %s already=%s", ami->ssid, param, value ? "true" : "false");
+        return bus_error_success;
+    }
+    *field = value;
+
+    em_printfout("Set AP-MLD ssid=\"%s\" %s=%s", ami->ssid, param, value ? "true" : "false");
+
+    return bus_error_success;
 }
 
 bus_error_t dm_easy_mesh_ctrl_t::affap_get_inner(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data)
@@ -10388,6 +10631,44 @@ bus_error_t dm_easy_mesh_ctrl_t::bus_get_cb_fwd(char *event_name, raw_data_t *p_
     return err;
 }
 
+bus_error_t dm_easy_mesh_ctrl_t::bus_set_cb_fwd(char *event_name, raw_data_t *p_data, bus_set_handler_t cb)
+{
+    uint32_t s_id;
+    bus_error_t err = bus_error_success;
+    em_event_t *req;
+    bus_resp_get_t *resp = NULL;
+    uintptr_t buf;
+    ssize_t len;
+
+    do {
+        req = static_cast<em_event_t *>(malloc(sizeof(em_event_t)));
+        if (!req) {
+            err = bus_error_out_of_resources;
+            break;
+        }
+        s_id = get_next_nb_evt_id();
+        req->type = em_event_type_nb;
+        req->u.nevt.id = s_id;
+        req->u.nevt.type = NB_REQTYPE_SET;
+        req->u.nevt.u.get.name = event_name;
+        req->u.nevt.u.get.property = p_data;
+        req->u.nevt.cb = reinterpret_cast<void*>(cb);
+
+        em_ctrl_t::get_em_ctrl_instance()->push_to_queue(req);
+
+        len = read(get_nb_pipe_rd(), &buf, sizeof(buf));
+        assert(len == sizeof(buf));
+        resp = reinterpret_cast<bus_resp_get_t*>(buf);
+        assert(resp->id == s_id);
+        err = resp->rc;
+
+        em_printfout("  push to queue success");
+    } while (0);
+
+    free(resp);
+    return err;
+}
+
 void dm_easy_mesh_ctrl_t::update_network_topology()
 {
     dm_easy_mesh_t *dm;
@@ -10444,7 +10725,7 @@ int dm_easy_mesh_ctrl_t::init(const char *data_model_path, em_mgr_t *mgr)
 {
     int rc;
 
-    m_data_model_list.init(mgr);
+    m_data_model_list.init(mgr, get_dev_interface());
     init_tables();
 
     if (m_db_client.init(data_model_path) != 0) {

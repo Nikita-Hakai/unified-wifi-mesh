@@ -160,7 +160,9 @@ void em_t::orch_execute(em_cmd_t *pcmd)
                     util::mac_to_string(em_t::get_radio_interface_mac()).c_str());
             if ((pcmd->get_orch_op() == dm_orch_type_topo_sync) && (m_sm.get_state() == em_state_ctrl_wsc_m2_sent)) {
                 m_sm.set_state(em_state_ctrl_topo_sync_pending);
-            } else if ((pcmd->get_orch_op() == dm_orch_type_ap_cap_query) && (m_sm.get_state() == em_state_ctrl_topo_synchronized)) {
+            }  else if ((pcmd->get_orch_op() == dm_orch_type_topo_publish) && (m_sm.get_state() == em_state_ctrl_topo_synchronized)) {
+                m_sm.set_state(em_state_ctrl_topo_publish_pending);
+            } else if ((pcmd->get_orch_op() == dm_orch_type_ap_cap_query) && (m_sm.get_state() == em_state_ctrl_topo_published)) {
                 m_sm.set_state(em_state_ctrl_ap_cap_query_pending);
             } else if ((pcmd->get_orch_op() == dm_orch_type_channel_pref) && (m_sm.get_state() == em_state_ctrl_ap_cap_report_received)) {
                 m_sm.set_state(em_state_ctrl_channel_query_pending);
@@ -168,11 +170,9 @@ void em_t::orch_execute(em_cmd_t *pcmd)
                 m_sm.set_state(em_state_ctrl_set_policy_pending);
             } else if ((pcmd->get_orch_op() == dm_orch_type_channel_sel) && (m_sm.get_state() == em_state_ctrl_configured)) {
                 m_sm.set_state(em_state_ctrl_channel_select_pending);
-            } else if ((pcmd->get_orch_op() == dm_orch_type_channel_scan_req) && (m_sm.get_state() == em_state_ctrl_configured)) {
+            } /*else if ((pcmd->get_orch_op() == dm_orch_type_channel_scan_req) && (m_sm.get_state() == em_state_ctrl_configured)) {
                 m_sm.set_state(em_state_ctrl_channel_scan_pending);
-            } else if ((pcmd->get_orch_op() == dm_orch_type_topo_publish) && (m_sm.get_state() == em_state_ctrl_configured)) {
-                m_sm.set_state(em_state_ctrl_topo_publish_pending);
-            }
+            }*/
             break;
 
         case em_cmd_type_dev_test:
@@ -254,6 +254,11 @@ void em_t::orch_execute(em_cmd_t *pcmd)
             m_sm.set_state(em_state_agent_link_quality_report_pending);
             break;
 
+        case em_cmd_type_generic_data:
+           em_printfout("WEI debug: orch_execute entered generic_data case, state:%s", em_t::state_2_str(m_sm.get_state()));
+           // m_sm.set_state(em_state_agent_vendor_data_pending);
+           break;
+
         case em_cmd_type_beacon_query:
             m_sm.set_state(em_state_beacon_report_pending);
             break;
@@ -273,6 +278,10 @@ void em_t::orch_execute(em_cmd_t *pcmd)
         case em_cmd_type_unassoc_sta_result:
             m_sm.set_state(em_state_agent_unassoc_sta_metrics_report_pending);
             break;
+
+        // case em_cmd_type_generic_data:
+        //     m_sm.set_state(em_state_agent_generic_data_pending);
+        //     break;
         
 	default:
             break;
@@ -327,6 +336,7 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_ap_cap_rprt:
         case em_msg_type_client_cap_query:
         case em_msg_type_client_cap_rprt:
+        case em_msg_type_early_ap_cap_rprt:
             em_capability_t::process_msg(data, len);
             em_metrics_t::process_msg(data, len);
             break;
@@ -347,12 +357,13 @@ void em_t::proto_process(unsigned char *data, unsigned int len)
         case em_msg_type_beacon_metrics_query:
         case em_msg_type_beacon_metrics_rsp:
         case em_msg_type_ap_metrics_rsp:
-        case em_msg_type_topo_vendor:
-	    case em_msg_type_unassoc_sta_link_metrics_query: 
-        case em_msg_type_unassoc_sta_link_metrics_rsp:	    
+        case em_msg_type_unassoc_sta_link_metrics_query: 
+        case em_msg_type_unassoc_sta_link_metrics_rsp:      
             em_metrics_t::process_msg(data, len);
             break;
 
+        case em_msg_type_topo_vendor:
+            em_vendor_t::handle_vendor_msg(data, len);
         case em_msg_type_dpp_cce_ind:
         case em_msg_type_proxied_encap_dpp:
         case em_msg_type_direct_encap_dpp:
@@ -447,6 +458,9 @@ void em_t::handle_agent_state()
 
     // no state handling is allowd if orch state is not in progress
     if (m_orch_state != em_orch_state_progress) {
+        if ((m_cmd != NULL) && (m_cmd->m_type == em_cmd_type_generic_data)) {
+            em_printfout("WEI debug: handle_agent_state skipped, orch_state:%d (not progress) state:%s", m_orch_state, em_t::state_2_str(m_sm.get_state()));
+        }
         return;
     }
 
@@ -512,9 +526,23 @@ void em_t::handle_agent_state()
             }
             break;
 
+        // case em_cmd_type_generic_data:
+        //     if (m_sm.get_state() == em_state_agent_vendor_data_pending) {
+        //         em_vendor_t::send_vendor_sta_lq_data();
+        //     }
+        //     break;
+
         case em_cmd_type_unassoc_sta_result:
             if (m_sm.get_state() == em_state_agent_unassoc_sta_metrics_report_pending) {
                 em_metrics_t::process_agent_state();
+            }
+            break;
+
+        case em_cmd_type_generic_data:
+            em_printfout("WEI debug: handle_agent_state generic_data, orch_state:%d state:%s", m_orch_state, em_t::state_2_str(m_sm.get_state()));
+            if (m_sm.get_state() >= em_state_agent_topo_synchronized) {
+                em_printfout("WEI debug: calling em_vendor_t::process_agent_state()");
+                em_vendor_t::process_agent_state();
             }
             break;
 
@@ -649,7 +677,7 @@ void em_t::proto_run()
                     continue;
                 }
                 pthread_mutex_unlock(&m_iq.lock);
-                if (evt->type == em_event_type_frame) {
+		if (evt->type == em_event_type_frame) {
                     proto_process(evt->u.fevt.frame, evt->u.fevt.frame_len);
                 } else if (evt->type == em_event_type_cmd){
                     // em_cmd_event_t cevnt;
@@ -1333,7 +1361,7 @@ short em_t::create_airties_radio_capability_tlv(unsigned char *buff)
             return 0;
         }
         uint16_t supported_standards = htons(variant_to_airties_standards(cap_info->mode));
-        em_vendor_specific_v_t *vendor = reinterpret_cast<em_vendor_specific_v_t *>(buff);
+        em_vendor_specific_t *vendor = reinterpret_cast<em_vendor_specific_t *>(buff);
         if (vendor == NULL) {
             em_printfout("No data Found");
             return 0;
@@ -1551,6 +1579,9 @@ short em_t::create_wifi7_tlv(unsigned char *buff)
     em_wifi7_freq_record_tlv_t *record = NULL;
     em_wifi7_agent_cap_t *em_wifi7_cap = NULL;
     unsigned char *tmp = buff;
+    unsigned char raw_bsta_max_links, raw_ap_max_links;
+    unsigned char enc_bsta_max_links = 0;
+    unsigned char enc_ap_max_links = 0;
 
     em_wifi7_cap_link_info_tlv_t *link_info = reinterpret_cast<em_wifi7_cap_link_info_tlv_t *>(tmp);
     if ((link_info == NULL)) {
@@ -1558,9 +1589,29 @@ short em_t::create_wifi7_tlv(unsigned char *buff)
         return 0;
     }
 
+    /*
+     * EasyMesh encodes AP/bSTA Maximum Links as (affiliated links - 1),
+     * valid range [0..14], with 15 reserved.
+     */
+    raw_bsta_max_links = dm->get_device_info()->bstamld_maxlinks;
+    raw_ap_max_links = dm->get_device_info()->apmld_maxlinks;
+
+    if (raw_bsta_max_links > 0) {
+        enc_bsta_max_links = static_cast<unsigned char>(raw_bsta_max_links - 1);
+        if (enc_bsta_max_links > 14) {
+            enc_bsta_max_links = 14;
+        }
+    }
+    if (raw_ap_max_links > 0) {
+        enc_ap_max_links = static_cast<unsigned char>(raw_ap_max_links - 1);
+        if (enc_ap_max_links > 14) {
+            enc_ap_max_links = 14;
+        }
+    }
+
     link_info->max_num_mlds = dm->get_device_info()->max_nummlds;
-    link_info->bsta_max_links = dm->get_device_info()->bstamld_maxlinks;
-    link_info->ap_max_links = dm->get_device_info()->apmld_maxlinks;
+    link_info->bsta_max_links = enc_bsta_max_links;
+    link_info->ap_max_links = enc_ap_max_links;
     link_info->tid_link_mapping_cap = dm->get_device_info()->tidlink_map;
 
     offset += static_cast<short>(sizeof(em_wifi7_cap_link_info_tlv_t));
@@ -2703,7 +2754,7 @@ int em_t::handle_wifi6_cap_tlv(unsigned char *buff)
         em_printfout("\t\tmcs_nss_num: %d", em_wifi6_cap->roles[i].role_head.mcs_nss_num);
         for(int j = 0; j < em_wifi6_cap->roles[i].role_head.mcs_nss_num/EM_MIN_HE_MCS_LEN; j++) {
             em_printfout("\t\tmac_nss Tx[%d] = %hu, Rx[%d] = %hu", j, em_wifi6_cap->roles[i].sprt_tx_rx_mcs[j].tx_he_mcs,
-                em_wifi6_cap->roles[i].sprt_tx_rx_mcs[j].rx_he_mcs);
+                j, em_wifi6_cap->roles[i].sprt_tx_rx_mcs[j].rx_he_mcs);
         }
     }
     return 0;
@@ -2837,8 +2888,23 @@ int em_t::handle_wifi7_agent_cap_tlv(unsigned char *buff)
     }
 
     dm->m_device.m_device_info.max_nummlds = link_info->max_num_mlds ;
-    dm->m_device.m_device_info.bstamld_maxlinks = link_info->bsta_max_links;
-    dm->m_device.m_device_info.apmld_maxlinks = link_info->ap_max_links;
+
+    /* Convert AP/bSTA max links from wire value (count-1) back to real count. */
+    if (dm->m_device.m_device_info.max_nummlds == 0) {
+        dm->m_device.m_device_info.bstamld_maxlinks = 0;
+        dm->m_device.m_device_info.apmld_maxlinks = 0;
+    } else {
+        dm->m_device.m_device_info.bstamld_maxlinks =
+            (link_info->bsta_max_links <= 14) ? static_cast<unsigned char>(link_info->bsta_max_links + 1) : 0;
+        dm->m_device.m_device_info.apmld_maxlinks =
+            (link_info->ap_max_links <= 14) ? static_cast<unsigned char>(link_info->ap_max_links + 1) : 0;
+    }
+
+    if (link_info->ap_max_links == 15 || link_info->bsta_max_links == 15) {
+        em_printfout("WiFi7 link-info reserved value received (ap=%u bsta=%u), converted to safe defaults",
+            link_info->ap_max_links, link_info->bsta_max_links);
+    }
+
     dm->m_device.m_device_info.tidlink_map = link_info->tid_link_mapping_cap;
 
     return 0;
@@ -2967,9 +3033,12 @@ const char *em_t::state_2_str(em_state_t state)
         EM_STATE_2S(em_state_ctrl_bsta_cap_pending)
         EM_STATE_2S(em_state_ctrl_topo_publish_pending)
 	EM_STATE_2S(em_state_ctrl_unassoc_sta_link_metrics_pending)
+        EM_STATE_2S(em_state_ctrl_topo_published)
+        EM_STATE_2S(em_state_ctrl_client_assoc_ctrl_req_pending)
         EM_STATE_2S(em_state_agent_unconfigured)
         EM_STATE_2S(em_state_agent_autoconfig_rsp_pending)
         EM_STATE_2S(em_state_agent_wsc_m2_pending)
+        EM_STATE_2S(em_state_agent_wsc_m2_config_skipping)
         EM_STATE_2S(em_state_agent_steer_btm_res_pending)
         EM_STATE_2S(em_state_agent_owconfig_pending)
         EM_STATE_2S(em_state_agent_onewifi_bssconfig_ind)

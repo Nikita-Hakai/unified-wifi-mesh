@@ -30,6 +30,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <cjson/cJSON.h>
@@ -43,11 +44,25 @@
 
 #include <string>
 #include <vector>
+#include <fstream>
+#include <cctype>
 #ifdef AL_SAP
 #include "al_service_access_point.h"
 #endif
 
 #define RETRY_SLEEP_INTERVAL_IN_MS 1000
+
+// Private/custom extension point: when custom/src/agent/lq_agent_listener.cpp is
+// built (see custom/custom.mk), this binds LQ_STATS_SOCKET_PATH and forwards
+// decoded WEI stats directly into the orchestrator, replacing the legacy
+// OneWifi "Device.WiFi.EM.WEIData" bus-publish mechanism. Weak no-op fallback
+// keeps the open-source build linkable without the private extension.
+extern "C" {
+__attribute__((weak)) void lq_agent_listener_start() { }
+}
+#define EMEX_AIRTIES_CLIENT_ID      "Device.Services.X_AIRTIES_Edge.AuthConfig.ClientID"
+#define EMEX_AIRTIES_CLIENT_SECRET  "Device.Services.X_AIRTIES_Edge.AuthConfig.ClientPassword"
+#define EMEX_FILE_BOOT_ID           "/proc/sys/kernel/random/boot_id"
 
 em_agent_t g_agent;
 #ifdef AL_SAP
@@ -884,6 +899,10 @@ void em_agent_t::handle_unassoc_sta_result(em_bus_event_t *evt)
 
 int em_agent_t::send_unassoc_sta_query_subdoc(wifi_bus_desc_t *desc, bus_handle_t *bus_hdl, em_unassoc_work_list_t *work)
 {
+    unsigned int vap_index = 0;
+    bool found = false;
+    mac_address_t target_ruid = {0};
+
     if ((desc == NULL) || (bus_hdl == NULL) || (work == NULL)) {
         em_printfout("%s:%d Invalid input params desc=%p bus_hdl=%p work=%p",
                      __func__, __LINE__, desc, bus_hdl, work);
@@ -981,8 +1000,70 @@ int em_agent_t::send_unassoc_sta_query_subdoc(wifi_bus_desc_t *desc, bus_handle_
     bus_data.raw_data.bytes = json_str;
     bus_data.raw_data_len = strlen(json_str);
 
-    if (desc->bus_set_fn(bus_hdl, "Device.WiFi.UnAssoc.STA", &bus_data) != 0) {
-        em_printfout("%s:%d Unassoc subdoc send failed",  __func__, __LINE__);
+    if (cJSON_GetArraySize(query_list) == 0) {
+        em_printfout("%s:%d Unassoc STA query has no operating classes", __func__, __LINE__);
+        free(json_str);
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    bool ruid_resolved = false;
+    for (unsigned int i = 0; i < m_data_model.get_num_op_class(); i++) {
+        dm_op_class_t *opclass = m_data_model.get_op_class(i);
+
+        if (opclass == nullptr) {
+            continue;
+        }
+
+        if (opclass->m_op_class_info.op_class == work->opclass_list[0].op_class) {
+            memcpy(target_ruid, opclass->m_op_class_info.id.ruid, sizeof(mac_address_t));
+            ruid_resolved = true;
+            break;
+        }
+    }
+
+    if (!ruid_resolved) {
+        em_printfout("%s:%d Failed to resolve RUID for opclass=%u", __func__, __LINE__, (unsigned int)work->opclass_list[0].op_class);
+        free(json_str);
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    /* Find AP BSS for this RUID */
+    for (unsigned int i = 0; i < m_data_model.get_num_bss(); i++) {
+        em_bss_info_t *bss = m_data_model.get_bss_info(i);
+        if (bss == nullptr) {
+            continue;
+        }
+
+        if (bss->vap_mode != em_vap_mode_ap) {
+            continue;
+        }
+
+        if (memcmp(bss->ruid.mac, target_ruid, sizeof(mac_address_t)) == 0) {
+            vap_index = bss->vap_index;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        em_printfout("%s:%d Failed to resolve AP VAP index for opclass=%u", __func__, __LINE__,
+                      static_cast<unsigned int>(work->opclass_list[0].op_class));
+        free(json_str);
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    char bus_path[128] = {0};
+    snprintf(bus_path, sizeof(bus_path), "Device.WiFi.AccessPoint.%u.X_RDKCENTRAL-COM_GetNaSta", vap_index + 1);
+
+    raw_data_t out_data;
+    memset(&out_data, 0, sizeof(raw_data_t));
+
+    int rc = desc->bus_method_invoke_fn(bus_hdl,NULL, bus_path, &bus_data, &out_data, 1);
+    if (rc != bus_error_success) {
+        em_printfout("%s:%d Unassoc STA subdoc send failed",  __func__, __LINE__);
         free(json_str);
         cJSON_Delete(root);	
         return -1;
@@ -1322,6 +1403,20 @@ void em_agent_t::handle_link_stats_report(em_bus_event_t *evt)
     }
 }
 
+void em_agent_t::handle_wei_app_data(em_bus_event_t *evt)
+{
+    em_cmd_t *pcmd[EM_MAX_CMD] = {NULL};
+    unsigned int num;
+
+    /* if (m_orch->is_cmd_type_in_progress(evt) == true) {
+        em_printfout("analyze_wei_app_data in progress");
+    } else */ if ((num = static_cast<unsigned int>(m_data_model.analyze_wei_app_data(evt, pcmd))) == 0) {
+        em_printfout("analyze_wei_app_data failed");
+    } else if (m_orch->submit_commands(pcmd, num) > 0) {
+        em_printfout("Submitted WEI app data cmd for orch");
+    }
+}
+
 void em_agent_t::handle_bus_event(em_bus_event_t *evt)
 {   
 
@@ -1445,6 +1540,10 @@ void em_agent_t::handle_bus_event(em_bus_event_t *evt)
             handle_unassoc_sta_result(evt);
             break;
 
+        case em_bus_event_type_wei_app_data:
+            handle_wei_app_data(evt);
+            break;
+
         default:
             break;
     }    
@@ -1500,6 +1599,85 @@ int em_agent_t::refresh_onewifi_subdoc(const char * log_name, const webconfig_su
     ASSERT_NOT_NULL(desc, false, "%s:%d descriptor is null\n", __func__, __LINE__);
     
     return m_data_model.refresh_onewifi_subdoc(desc, &m_bus_hdl, log_name, type);
+}
+
+bool em_agent_t::refresh_current_radio_data(const unsigned char *ruid)
+{
+    if (ruid == nullptr) {
+        return false;
+    }
+
+    const auto has_current_radio_channel = [this, ruid]() {
+        for (unsigned int index = 0; index < m_data_model.get_num_op_class(); ++index) {
+            em_op_class_info_t *op_class = m_data_model.get_op_class_info(index);
+            if (op_class->id.type == em_op_class_type_current &&
+                memcmp(op_class->id.ruid, ruid, sizeof(mac_address_t)) == 0 &&
+                op_class->op_class != 0 && op_class->channel != 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (has_current_radio_channel()) {
+        return true;
+    }
+
+    wifi_bus_desc_t *desc = get_bus_descriptor();
+    raw_data_t data = {};
+    if (desc == nullptr || desc->bus_data_get_fn == nullptr) {
+        return false;
+    }
+
+    bus_error_t status = desc->bus_data_get_fn(&m_bus_hdl, WIFI_WEBCONFIG_INIT_DML_DATA, &data);
+    if (status != bus_error_success || data.raw_data.bytes == nullptr) {
+        em_printfout("Failed to read current OneWifi radio data: %d", status);
+        if (data.raw_data.bytes != nullptr) {
+            if (desc->bus_data_free_fn != nullptr) {
+                desc->bus_data_free_fn(&data);
+            } else {
+                free(data.raw_data.bytes);
+            }
+        }
+        return false;
+    }
+
+    dm_easy_mesh_agent_t radio_snapshot;
+    radio_snapshot.translate_onewifi_dml_data(reinterpret_cast<char *>(data.raw_data.bytes));
+    if (desc->bus_data_free_fn != nullptr) {
+        desc->bus_data_free_fn(&data);
+    } else {
+        free(data.raw_data.bytes);
+    }
+
+    unsigned int num_op_class = m_data_model.get_num_op_class();
+    for (unsigned int index = 0; index < radio_snapshot.get_num_op_class(); ++index) {
+        em_op_class_info_t *snapshot_op_class = radio_snapshot.get_op_class_info(index);
+        if (snapshot_op_class->id.type != em_op_class_type_current ||
+            memcmp(snapshot_op_class->id.ruid, ruid, sizeof(mac_address_t)) != 0 ||
+            snapshot_op_class->op_class == 0 || snapshot_op_class->channel == 0) {
+            continue;
+        }
+
+        unsigned int existing_index = 0;
+        for (; existing_index < num_op_class; ++existing_index) {
+            em_op_class_info_t *existing_op_class = m_data_model.get_op_class_info(existing_index);
+            if (existing_op_class->id.type == em_op_class_type_current &&
+                memcmp(existing_op_class->id.ruid, ruid, sizeof(mac_address_t)) == 0) {
+                break;
+            }
+        }
+
+        if (existing_index == num_op_class) {
+            if (num_op_class >= EM_MAX_OPCLASS) {
+                break;
+            }
+            m_data_model.set_num_op_class(++num_op_class);
+        }
+        *m_data_model.get_op_class_info(existing_index) = *snapshot_op_class;
+    }
+
+    return has_current_radio_channel();
 }
 
 bool em_agent_t::send_backhaul_action_frame(uint8_t dest_mac[ETH_ALEN], uint8_t *action_frame, size_t action_frame_len, unsigned int frequency, unsigned int wait_time_ms) {
@@ -1652,6 +1830,7 @@ void em_agent_t::input_listener()
     em_printfout("bus open success");
 
     load_em_plus_cfg();
+    fill_extended_device_info();
 
     memset(&data, 0, sizeof(raw_data_t));
 
@@ -1733,6 +1912,11 @@ void em_agent_t::input_listener()
         return;
     }
 
+    // WEI stats/events are now consumed directly from the LQ UDS socket by
+    // lq_agent_listener_start() (see custom/src/agent/lq_agent_listener.cpp),
+    // superseding the old "Device.WiFi.EM.WEIData" bus subscription.
+    lq_agent_listener_start();
+
     io(NULL);
 }
 
@@ -1762,14 +1946,14 @@ int em_agent_t::unassoc_sta_link_metrics_cb(char *event_name, bus_data_prop_t *d
         return -1;
     }
 
-    if (strcmp(subdoc_name->valuestring, "UnassocStaLinkMetricsResponse") != 0) {
+    if (strcmp(subdoc_name->valuestring, "UnassocStaQuery") != 0) {
         em_printfout("%s:%d unexpected SubDocName=%s",__func__, __LINE__, subdoc_name->valuestring);
         cJSON_Delete(json);
         return -1;
     }
 
-    cJSON *resp = cJSON_GetObjectItemCaseSensitive(json, "UnassocStaLinkMetricsResponse");
-    if ((resp == NULL) || (!cJSON_IsArray(resp))) {
+    cJSON *resp = cJSON_GetObjectItemCaseSensitive(json, "UnassociatedSTALinkMetricsResponse");
+    if ((resp == NULL) || (!cJSON_IsObject(resp))) {
         em_printfout("%s:%d response array missing",__func__,__LINE__);
         cJSON_Delete(json);
         return -1;
@@ -1804,7 +1988,7 @@ int em_agent_t::association_status_cb(char *event_name, bus_data_prop_t *data, v
         em_printfout("NULL data from OneWiFi callback!");
         return -1;
     }
-    g_agent.io_process(em_bus_event_type_assoc_status, reinterpret_cast<unsigned char *>(data->value.raw_data.bytes), data->value.raw_data_len);
+    //g_agent.io_process(em_bus_event_type_assoc_status, reinterpret_cast<unsigned char *>(data->value.raw_data.bytes), data->value.raw_data_len);
     return 1;
 }
 
@@ -2062,17 +2246,20 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 
     assert(len > ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))));
     if (len < ((sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)))) {
-        return NULL;
+        em_printfout("%s %d len : %u comparision-le  : %u\n", __func__, __LINE__, len, (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)));  
+	return NULL;
     }
    
     hdr = reinterpret_cast<em_raw_hdr_t *>(data);
 
     if (hdr->type != htons(ETH_P_1905)) {
+	 em_printfout("%s %d header type failure\n", __func__, __LINE__);
         return NULL;
     }
    
     cmdu = reinterpret_cast<em_cmdu_t *>(data + sizeof(em_raw_hdr_t));
 
+    em_printfout("%s:%d: FrameType:%d\n", __func__, __LINE__, htons(cmdu->type));
     switch (htons(cmdu->type)) {
 	case em_msg_type_autoconf_resp:
 		found = false;
@@ -2091,7 +2278,8 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 			if (!(em->is_al_interface_em())) {
 				if (em->is_matching_freq_band(&band) == true) {
 					if ((em->get_state() != em_state_agent_autoconfig_renew_pending) && (em->get_state() !=em_state_agent_wsc_m2_pending) && 
-                        (em->get_state() != em_state_agent_owconfig_pending) && (em->get_state() != em_state_agent_1905_securing)) {
+                        (em->get_state() != em_state_agent_owconfig_pending) && (em->get_state() != em_state_agent_1905_securing) &&
+                        (em->get_state() != em_state_agent_wsc_m2_config_skipping)) {
 						found = true;
 						break;
 					} else {
@@ -2165,6 +2353,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
 		case em_msg_type_autoconf_wsc:
 			if (em_msg_t(data + (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t)),
                 	len - (sizeof(em_raw_hdr_t) + sizeof(em_cmdu_t))).get_radio_id(&ruid) == false) {
+				em_printfout("%s:%d: Failed here\n", __func__, __LINE__);
 				return NULL;
 			}
 
@@ -2172,6 +2361,7 @@ em_t *em_agent_t::find_em_for_msg_type(unsigned char *data, unsigned int len, em
          if ((em = static_cast<em_t *>(hash_map_get(m_em_map, mac_str1))) != NULL) {
             	printf("%s:%d: Found existing radio:%s\n", __func__, __LINE__, mac_str1);
         	} else {
+			         em_printfout("%s:%d: Radio not found%s\n", __func__, __LINE__, mac_str1);
 				return NULL;
 			}
 			break;
@@ -2541,6 +2731,100 @@ void em_agent_t::load_em_plus_cfg()
         em_printfout("EM+ agent mode enabled");
     }
     cJSON_Delete(root);
+}
+
+/**
+ * Boot id from the kernel's per-boot UUID: stable for the boot, changes on reboot, no file of
+ * our own to write or protect. Cached after the first read. Folded to 32 bits (FNV-1a) for the
+ * TLV's uint32_t field.
+ */
+static uint32_t get_boot_id()
+{
+    static const uint32_t boot_id = []() -> uint32_t {
+        std::ifstream boot_id_file(EMEX_FILE_BOOT_ID);
+        std::string uuid;
+        if (!boot_id_file || !std::getline(boot_id_file, uuid) || uuid.empty()) {
+            em_printfout("Cannot read file " EMEX_FILE_BOOT_ID ", boot id set to 0");
+            return 0;
+        }
+
+        uint32_t hash = 2166136261U;
+        for (char ch : uuid) {
+            unsigned char c = static_cast<unsigned char> (ch);
+            if (std::isxdigit(c)) {
+                hash = (hash ^ static_cast<uint32_t> (c)) * 16777619U;
+            }
+        }
+        return hash;
+    }();
+
+    return boot_id;
+}
+
+int em_agent_t::fill_extended_device_info()
+{
+    em_ext_device_info_t *edi = &m_data_model.get_device_info()->extended_info;
+
+    edi->boot_id = get_boot_id();
+
+    /* Set before the bus lookup, these need no bus access to be valid. */
+
+    /* Set as gateway by default, until it is implemented */
+    edi->product_class = emex_product_class_gw;
+
+    /* Set as controller by default, until it is implemented */
+    edi->device_role = emex_device_role_controller;
+
+    wifi_bus_desc_t *desc;
+    if ((desc = get_bus_descriptor()) == NULL) {
+        em_printfout("Error: Descriptor is null");
+        return -1;
+    }
+
+    raw_data_t data;
+    memset(&data, 0, sizeof(raw_data_t));
+    bus_error_t bus_rc = desc->bus_data_get_fn(&m_bus_hdl, EMEX_AIRTIES_CLIENT_ID, &data);
+    if (bus_rc != bus_error_success) {
+        em_printfout("Error: Client ID not found");
+    } else if (data.data_type == bus_data_type_string && data.raw_data.bytes != NULL) {
+        const char *val = reinterpret_cast<const char *> (data.raw_data.bytes);
+        size_t scan = (data.raw_data_len < sizeof(edi->client_id)) ? data.raw_data_len : sizeof(edi->client_id);
+        size_t id_len = strnlen(val, scan);
+
+        if (id_len == 0 || id_len > EMEX_MAX_CLIENT_ID_LEN) {
+            em_printfout("Error: Client ID has invalid length");
+        } else {
+            edi->client_id_len = static_cast<unsigned char> (id_len);
+            memcpy(edi->client_id, val, id_len);
+            edi->client_id[id_len] = '\0';
+        }
+    } else {
+        em_printfout("Error: Client ID has invalid type");
+    }
+    desc->bus_data_free_fn(&data);
+
+    memset(&data, 0, sizeof(raw_data_t));
+    bus_rc = desc->bus_data_get_fn(&m_bus_hdl, EMEX_AIRTIES_CLIENT_SECRET, &data);
+    if (bus_rc != bus_error_success) {
+        em_printfout("Error: Client Secret not found");
+    } else if (data.data_type == bus_data_type_string && data.raw_data.bytes != NULL) {
+        const char *val = reinterpret_cast<const char *> (data.raw_data.bytes);
+        size_t scan = (data.raw_data_len < sizeof(edi->client_secret)) ? data.raw_data_len : sizeof(edi->client_secret);
+        size_t sec_len = strnlen(val, scan);
+
+        if (sec_len == 0 || sec_len > EMEX_MAX_CLIENT_SEC_LEN) {
+            em_printfout("Error: Client Secret has invalid length");
+        } else {
+            edi->client_secret_len = static_cast<unsigned char> (sec_len);
+            memcpy(edi->client_secret, val, sec_len);
+            edi->client_secret[sec_len] = '\0';
+        }
+    } else {
+        em_printfout("Error: Client Secret has invalid type");
+    }
+    desc->bus_data_free_fn(&data);
+
+    return 0;
 }
 
 bool em_agent_t::try_start_dpp_onboarding()  {

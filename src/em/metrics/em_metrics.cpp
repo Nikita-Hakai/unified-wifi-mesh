@@ -37,17 +37,18 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <openssl/rand.h>
+#include <set>
 #include "em_metrics.h"
 #include "em_msg.h"
 #include "dm_easy_mesh.h"
 #include "em_cmd.h"
 #include "util.h"
 #include "em.h"
+#include "em_mgr.h"
 #include "em_cmd_exec.h"
 #include "dm_easy_mesh_agent.h"
 #include "em_cmd_unassoc_sta_query.h"
-
-static     const unsigned char em_vendor_oui[EM_VENDOR_OUI_SIZE] = {0xd8, 0x9c, 0x8e};
+#include <vector>
 
 int em_metrics_t::handle_assoc_sta_link_metrics_tlv(unsigned char *buff,
                                                     unsigned int tlv_len)
@@ -156,20 +157,42 @@ int em_metrics_t::handle_assoc_sta_ext_link_metrics_tlv(unsigned char *buff, uns
     return 0;
 }
 
-int em_metrics_t::handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff, unsigned int len)
+int em_metrics_t::handle_assoc_sta_vendor_link_metrics_tlv(unsigned char *buff,
+                                                           unsigned int len,
+                                                           bool *first_client_type_seen)
 {
     em_vendor_specific_t *vendor_metrics = reinterpret_cast<em_vendor_specific_t *> (buff);
-    em_vendor_data_t *vendor_data = vendor_metrics->data;
+    // vendor_metrics->data layout: [attr_id (1 byte)][vendor_data...]
+    unsigned char *vendor_data = vendor_metrics->data + sizeof(unsigned char);
     em_assoc_sta_vendor_link_metrics_t *sta_metrics;
     dm_sta_t *sta = NULL;
     dm_easy_mesh_t  *dm;
+    size_t client_type_len;
 
     dm = get_data_model();
-    sta_metrics = reinterpret_cast<em_assoc_sta_vendor_link_metrics_t *> (vendor_data->vendor_data);
+    sta_metrics = reinterpret_cast<em_assoc_sta_vendor_link_metrics_t *> (vendor_data);
 
     sta = dm->find_sta(sta_metrics->sta_mac, sta_metrics->bssid);
+    em_printfout("sta %s for bssid: %s", util::mac_to_string(sta_metrics->sta_mac).c_str(), util::mac_to_string(sta_metrics->bssid).c_str());
     if (sta != NULL && len >= sizeof(em_assoc_sta_vendor_link_metrics_t)) {
-        strncpy(sta->m_sta_info.sta_client_type, sta_metrics->sta_client_type, sizeof(sta->m_sta_info.sta_client_type));
+        client_type_len = strnlen(sta_metrics->sta_client_type,
+                                  sizeof(sta_metrics->sta_client_type));
+        if (client_type_len == sizeof(sta_metrics->sta_client_type)) {
+            client_type_len--;
+        }
+
+        if (client_type_len > 0) {
+            /* Metrics repeat periodically; report only the first value for a STA. */
+            if (first_client_type_seen != NULL && sta->m_sta_info.sta_client_type[0] == '\0') {
+                *first_client_type_seen = true;
+            }
+            memset(sta->m_sta_info.sta_client_type, 0,
+                   sizeof(sta->m_sta_info.sta_client_type));
+            memcpy(sta->m_sta_info.sta_client_type,
+                   sta_metrics->sta_client_type, client_type_len);
+        }
+        em_printfout("Entering %s %d with client type as %s\n",
+                     __func__, __LINE__, sta->m_sta_info.sta_client_type);
     }
 
     return 0;
@@ -204,6 +227,7 @@ int em_metrics_t::handle_associated_sta_link_metrics_resp(unsigned char *buff, u
     mac_address_t 	sta_mac;
     dm_easy_mesh_t  *dm;
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
+    bool first_client_type_seen = false;
 
     dm = get_data_model();
 
@@ -261,13 +285,17 @@ int em_metrics_t::handle_associated_sta_link_metrics_resp(unsigned char *buff, u
 
     while ((tlv->type != em_tlv_type_eom) && (tmp_len > 0)) {
         if (tlv->type == em_tlv_type_vendor_specific) {
-            handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, ntohs(tlv->len));
+            handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, ntohs(tlv->len),
+                &first_client_type_seen);
         }
 
         tmp_len -= (sizeof(em_tlv_t) + static_cast<size_t> (ntohs(tlv->len)));
         tlv = reinterpret_cast<em_tlv_t *> (reinterpret_cast<unsigned char *> (tlv) + sizeof(em_tlv_t) + ntohs(tlv->len));
     }
     dm->set_db_cfg_param(db_cfg_type_sta_metrics_update, "");
+    if (first_client_type_seen) {
+        get_mgr()->publish_network_topology();
+    }
     set_state(em_state_ctrl_configured);
 
     return 0;
@@ -892,17 +920,17 @@ int em_metrics_t::handle_link_stats_alarm_rprt_tlv(unsigned char *buff, size_t l
     dm = get_data_model();
 
     em_vendor_specific_t *vendor_data = reinterpret_cast<em_vendor_specific_t *> (tmp);
-    em_printfout("vendor_data->num count [%d]", vendor_data->num);
 
-    em_vendor_data_t *vendor_data_ptr = vendor_data->data;
-    em_printfout("vendor_data->attri [%d]", vendor_data_ptr->attr_id);
+    // vendor_data->data layout: [attr_id (1 byte)][payload...]
+    unsigned char attr_id = vendor_data->data[0];
+    em_printfout("vendor_data->attri [%d]", attr_id);
 
-    if (vendor_data_ptr->attr_id != vendor_ext_attr_id_link_report) {
+    if (attr_id != vendor_ext_attr_id_link_report) {
         return 0;
     }
 
-    tmp += sizeof(vendor_data->num) + EM_VENDOR_OUI_SIZE + sizeof(vendor_data_ptr->attr_id);
-    len -= static_cast<unsigned int>( sizeof(vendor_data->num) + EM_VENDOR_OUI_SIZE ) + sizeof(vendor_data_ptr->attr_id);
+    tmp += EM_VENDOR_OUI_SIZE + sizeof(attr_id);
+    len -= static_cast<unsigned int>(EM_VENDOR_OUI_SIZE) + sizeof(attr_id);
 
     link_report = reinterpret_cast<em_link_report_t *> (tmp);
 
@@ -977,18 +1005,21 @@ int em_metrics_t::handle_link_stats_alarm_rprt_tlv(unsigned char *buff, size_t l
     return 0;
 }
 
-int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int len)
+int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int len, em_profile_type_t peer_profile)
 {
     em_tlv_t *tlv, *tlv_start;
     size_t tmp_len, base_len;
     dm_easy_mesh_t  *dm;
     char *errors[EM_MAX_TLV_MEMBERS] = {0};
     bssid_t bssid = {};
+    bool first_client_type_seen = false;
 
     dm = get_data_model();
 
-    if (em_msg_t(em_msg_type_ap_metrics_rsp, get_profile_type(), buff, len).validate(errors) == 0) {
-        printf("%s:%d: AP Metrics metrics response msg validation failed\n", __func__, __LINE__);
+    em_profile_type_t validation_profile = (peer_profile == em_profile_type_reserved) ? em_profile_type_1 : peer_profile;
+
+    if (em_msg_t(em_msg_type_ap_metrics_rsp, validation_profile, buff, len).validate(errors) == 0) {
+        em_printfout("%s:%d: AP Metrics metrics response msg validation failed\n", __func__, __LINE__);
         return -1;
     }
 
@@ -1004,6 +1035,7 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
     tlv = tlv_start;
     tmp_len = base_len;
 
+    em_printfout("Entering %s:%d\n", __func__, __LINE__);
     while ((tmp_len >= sizeof(em_tlv_t)) && (tlv->type != em_tlv_type_eom)) {
         /* Stop before a TLV that runs past the received bytes; tmp_len would underflow. */
         size_t tlv_total = sizeof(em_tlv_t) + static_cast<size_t> (ntohs(tlv->len));
@@ -1047,7 +1079,7 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
                 /* future implementation */
                 break;
             case em_tlv_type_vendor_specific: {
-                em_vendor_specific_v_t *vendor_tlv = reinterpret_cast<em_vendor_specific_v_t *> (tlv->value);
+                em_vendor_specific_t *vendor_tlv = reinterpret_cast<em_vendor_specific_t *> (tlv->value);
                 size_t len = ntohs(tlv->len);
                 uint16_t tlv_id;
                 if ((len >= sizeof(airties_vendor_oui) + sizeof(tlv_id)) && (memcmp(vendor_tlv->vendor_oui, airties_vendor_oui, sizeof(airties_vendor_oui)) == 0)) {
@@ -1062,7 +1094,8 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
                         em_printfout("unknown Airties vendor tlv_id 0x%04x, skipping TLV", tlv_id);
                     }
                 } else {
-                    if (handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, len) != 0) {
+                    if (handle_assoc_sta_vendor_link_metrics_tlv(tlv->value, ntohs(tlv->len),
+                            &first_client_type_seen) != 0) {
                         em_printfout("assoc_sta_vendor_link_metrics_tlv failed, skipping TLV");
                     }
                 }
@@ -1076,6 +1109,9 @@ int em_metrics_t::handle_ap_metrics_response(unsigned char *buff, unsigned int l
     }
 
     dm->set_db_cfg_param(db_cfg_type_sta_metrics_update, "");
+    if (first_client_type_seen) {
+        get_mgr()->publish_network_topology();
+    }
 
     return 0;
 }
@@ -1643,18 +1679,16 @@ short em_metrics_t::create_assoc_vendor_sta_link_metrics_tlv(unsigned char *buff
     size_t len = 0;
     em_assoc_sta_vendor_link_metrics_t *assoc_sta_metrics = NULL;
     em_vendor_specific_t *vendor_metrics = reinterpret_cast<em_vendor_specific_t *> (buff);
-    em_vendor_data_t *vendor_data = vendor_metrics->data;
+    // vendor_metrics->data layout: [attr_id (1 byte)][vendor_data...]
+    unsigned char *vendor_data = vendor_metrics->data + sizeof(unsigned char);
 
-    assoc_sta_metrics = reinterpret_cast<em_assoc_sta_vendor_link_metrics_t *> (vendor_data->vendor_data);
+    assoc_sta_metrics = reinterpret_cast<em_assoc_sta_vendor_link_metrics_t *> (vendor_data);
 
-    memcpy(vendor_metrics->vendor_oui, em_vendor_oui, sizeof(vendor_metrics->vendor_oui));
+    memcpy(vendor_metrics->vendor_oui, comcast_vendor_oui, sizeof(vendor_metrics->vendor_oui));
     len += sizeof(vendor_metrics->vendor_oui);
 
-    vendor_metrics->num = 1;
-    len += sizeof(vendor_metrics->num);
-
-    vendor_data->attr_id = vendor_ext_attr_id_client_type;
-    len += sizeof(vendor_data->attr_id);
+    vendor_metrics->data[0] = static_cast<unsigned char> (vendor_ext_attr_id_client_type);
+    len += sizeof(unsigned char);
 
     if (sta == NULL) {
         memcpy(&assoc_sta_metrics->sta_mac, &sta_mac, sizeof(assoc_sta_metrics->sta_mac));
@@ -2161,7 +2195,7 @@ short em_metrics_t::create_vendor_device_metrics_tlv(unsigned char *buff)
     struct timespec ts;
     uint8_t cpu_load, cpu_temp;
     int32_t total_mem, free_mem, cached_mem;
-    em_vendor_specific_v_t *vendor = reinterpret_cast<em_vendor_specific_v_t *>(buff);
+    em_vendor_specific_t *vendor = reinterpret_cast<em_vendor_specific_t *>(buff);
 
     memcpy(reinterpret_cast<unsigned char *> (vendor->vendor_oui), airties_vendor_oui, EM_VENDOR_OUI_SIZE);
     len += EM_VENDOR_OUI_SIZE;
@@ -2276,18 +2310,17 @@ int em_metrics_t::create_link_stats_alarm_tlv(unsigned char *buff)
     size_t record_len = 0;
 
     em_vendor_specific_t *vendor_data = reinterpret_cast<em_vendor_specific_t *> (buff);
-    memcpy(reinterpret_cast<char *> (vendor_data->vendor_oui), em_vendor_oui, EM_VENDOR_OUI_SIZE);
+    memcpy(reinterpret_cast<char *> (vendor_data->vendor_oui), comcast_vendor_oui, EM_VENDOR_OUI_SIZE);
 
-    vendor_data->num = 1;
+    tmp += EM_VENDOR_OUI_SIZE;
+    len += EM_VENDOR_OUI_SIZE;
 
-    tmp += sizeof(vendor_data->num) + EM_VENDOR_OUI_SIZE;
-    len += sizeof(vendor_data->num) + EM_VENDOR_OUI_SIZE;
+    // vendor_data->data layout: [attr_id (1 byte)][payload...]
+    unsigned char *attr_id = vendor_data->data;
 
-    em_vendor_data_t *data = vendor_data->data;
-
-    data->attr_id = static_cast<unsigned char> (vendor_ext_attr_id_link_report);
-    len += sizeof(data->attr_id);
-    tmp += sizeof(data->attr_id);
+    *attr_id = static_cast<unsigned char> (vendor_ext_attr_id_link_report);
+    len += sizeof(unsigned char);
+    tmp += sizeof(unsigned char);
 
     sta = static_cast<dm_sta_t *> (hash_map_get_first(dm->m_sta_map));
     while (sta != NULL) {
@@ -2906,12 +2939,23 @@ void em_metrics_t::process_msg(unsigned char *data, unsigned int len)
             }
             break;
 
-        case em_msg_type_ap_metrics_rsp:
-            handle_ap_metrics_response(data, len);
+        case em_msg_type_ap_metrics_rsp: {
+            em_radios.clear();
+            get_mgr()->get_all_em_for_al_mac(hdr->src, em_radios);
+            em_profile_type_t peer_profile = em_radios.empty() ? em_profile_type_reserved :
+                em_radios.front()->get_data_model()->get_device()->get_peer_profile();
+            std::set<dm_easy_mesh_t *> handled_dms;
+            for (auto &em : em_radios) {
+                if (handled_dms.insert(em->get_data_model()).second) {
+                    em->handle_ap_metrics_response(data, len, peer_profile);
+                }
+            }
             break;
+        }
         case em_msg_type_topo_vendor:
             handle_vendor_msg(data, len);
             break;
+
         case em_msg_type_unassoc_sta_link_metrics_query:
             handle_unassoc_sta_link_metrics_query(data, len);
             break;

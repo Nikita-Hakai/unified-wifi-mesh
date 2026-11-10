@@ -264,6 +264,12 @@ static const mac_address_t EM_GLOBAL_MAC_ADDRESS = {0xff, 0xff, 0xff, 0xff, 0xff
 #define EM_MAX_SSID_LEN                33 
 #define EM_MAX_WIFI_PASSWORD_LEN       65 
 
+/* Airties EM Extensions related constants */
+#define EMEX_MIN_EXT_DEV_INFO_SZ       16
+#define EMEX_MAX_EXT_DEV_INFO_SZ       526
+#define EMEX_MAX_CLIENT_ID_LEN         255
+#define EMEX_MAX_CLIENT_SEC_LEN        255
+
 /* WSC Message TLV LENs */
 #define EM_CONN_TYPE_FLAGS_LEN         0x01
 #define EM_PRIMARY_DEV_TYPE_LEN        0x08
@@ -391,6 +397,9 @@ static const mac_address_t EM_GLOBAL_MAC_ADDRESS = {0xff, 0xff, 0xff, 0xff, 0xff
 #define ASSOC_CONTROL_BLOCK 0x00
 #define ASSOC_CONTROL_UNBLOCK 0x01
 
+#define EM_MLO_POLICY_HAUL_COUNT 2
+#define EM_MLO_DEFAULT_BAND_BITMAP (EM_RF_24GHZ | EM_RF_50GHZ | EM_RF_6GHZ)
+
 typedef char em_interface_name_t[32];
 typedef unsigned char em_nonce_t[16];
 typedef unsigned char em_dh5_key_t[192];    // because this is DH group 5 (1536 bits)
@@ -489,6 +498,18 @@ typedef enum {
     em_freq_band_6,     // Extended for 6GHz Band
     em_freq_band_unknown
 } em_freq_band_t;
+
+typedef enum {
+    EM_MLO_MODE_STR   = 0x1,
+    EM_MLO_MODE_NSTR  = 0x2,
+    EM_MLO_MODE_EMLSR = 0x4,
+    EM_MLO_MODE_EMLMR = 0x8
+} em_mlo_mode_bitmap_t;
+
+typedef struct {
+	bool use_mld_tlv;
+	uint8_t band_bitmap;
+} em_mlo_policy_t;
 
 typedef struct {
     unsigned char   channel[0];
@@ -734,7 +755,8 @@ typedef enum {
     em_msg_type_agent_list = 0x8035,
     em_msg_type_anticipated_channel_usage_rprt,
     em_msg_type_qos_mgmt_notif,
-    em_msg_type_ap_mld_config_req = 0x8044,
+    em_msg_type_early_ap_cap_rprt = 0x8043,
+    em_msg_type_ap_mld_config_req,
     em_msg_type_ap_mld_config_resp,
     em_msg_type_bsta_mld_config_req,
     em_msg_type_bsta_mld_config_resp,
@@ -906,6 +928,7 @@ typedef enum {
 } em_tlv_type_t;
 
 typedef enum {
+    em_tlv_type_airties_device_info = 0x0003,
     em_tlv_type_device_metrics = 0x0004,
     em_tlv_type_radio_capability = 0x0013,
 } em_vendor_airties_tlv_type_t;
@@ -1771,21 +1794,9 @@ typedef struct {
 } __attribute__((__packed__)) em_1905_mac_addr_t;
 
 typedef struct {
-    // this is of type vendor_ext_attr_id_t for vendor specific attributes
-    unsigned char attr_id;
-    unsigned char  vendor_data[0];
-} __attribute__((__packed__)) em_vendor_data_t;
-
-typedef struct {
-    unsigned char  vendor_oui[3];
-    unsigned char num;
-    em_vendor_data_t  data[0];
-} __attribute__((__packed__)) em_vendor_specific_t;
-
-typedef struct {
     unsigned char  vendor_oui[3];
     unsigned char  data[0];
-} __attribute__((__packed__)) em_vendor_specific_v_t;
+} __attribute__((__packed__)) em_vendor_specific_t;
 
 typedef struct {
     mac_address_t interface_mac;
@@ -2319,6 +2330,7 @@ typedef enum {
     vendor_ext_attr_id_policy_alarm,    // data of type em_link_stats_alarm_cfg_t
     vendor_ext_attr_id_policy_cfg_client_filter,    // data of type em_client_filters_cfg_t
     vendor_ext_attr_id_link_report,     // data of type em_link_report_t
+    vendor_ext_attr_id_passive,         // 1 byte: 0x01 indicates controller is in passive mode
 
     vendor_ext_attr_id_max
 } vendor_ext_attr_id_t;
@@ -2329,6 +2341,7 @@ typedef enum {
     em_state_agent_1905_securing,
     em_state_agent_autoconfig_rsp_pending,
     em_state_agent_wsc_m2_pending,
+    em_state_agent_wsc_m2_config_skipping,
     em_state_agent_owconfig_pending,
     em_state_agent_onewifi_bssconfig_ind,
 	em_state_agent_autoconfig_renew_pending,
@@ -2348,6 +2361,7 @@ typedef enum {
     em_state_agent_sta_link_metrics_pending,
     em_state_agent_steer_btm_res_pending,
     em_state_agent_link_quality_report_pending,
+    em_state_agent_vendor_data_pending,
 
     em_state_ctrl_unconfigured = 0x100,
     em_state_ctrl_wsc_m1_pending,
@@ -2380,7 +2394,8 @@ typedef enum {
     em_state_ctrl_avail_spectrum_inquiry_pending,
     em_state_ctrl_bsta_cap_pending,
     em_state_ctrl_topo_publish_pending,
-    em_state_ctrl_unassoc_sta_link_metrics_pending,
+    em_state_ctrl_unassoc_sta_link_metrics_pending, 
+    em_state_ctrl_topo_published,
     em_state_ctrl_client_assoc_ctrl_req_pending,
 
     //common states
@@ -2441,6 +2456,7 @@ typedef enum {
     em_cmd_type_get_link_quality_report,
     em_cmd_type_unassoc_sta_query,
     em_cmd_type_unassoc_sta_result,
+    em_cmd_type_generic_data,
     em_cmd_type_client_assoc_ctrl_req,
 
     em_cmd_type_max,
@@ -2523,6 +2539,30 @@ typedef struct {
 	em_media_type_t	media;	
 } em_device_id_t;
 
+typedef enum {
+    emex_product_class_gw = 0x80,
+} emex_product_class_t;
+
+typedef enum {
+    emex_device_role_controller = 0x80,
+} emex_device_role_t;
+
+/* Airties specific device information. Filled locally on the agent and sent to the
+ * controller in the WSC M1 message. The arrays are one byte longer than the maximum
+ * length they carry on the wire, so that the controller can NUL terminate them and
+ * expose them as strings over TR-181.
+ */
+typedef struct {
+    bool                 received;     /* Set by the controller only, false until an M1 carried the TLV */
+    unsigned int         boot_id;
+    unsigned char        client_id_len;
+    char                 client_id[EMEX_MAX_CLIENT_ID_LEN + 1];
+    unsigned char        client_secret_len;
+    char                 client_secret[EMEX_MAX_CLIENT_SEC_LEN + 1];
+    emex_product_class_t product_class;
+    emex_device_role_t   device_role;
+} em_ext_device_info_t;
+
 typedef struct {
 	em_device_id_t	id;
     em_interface_t	intf;
@@ -2579,6 +2619,7 @@ typedef struct {
     uint32_t cached_mem;
     unsigned char cpu_load;
     unsigned char cpu_temp;
+    em_ext_device_info_t extended_info;
 } em_device_info_t;
 
 typedef struct {
@@ -2814,6 +2855,7 @@ typedef struct {
     bool  nstr;
     bool  emlsr;
     bool  emlmr;
+    em_haul_type_t  haul_type;
     unsigned char  num_affiliated_ap;
     em_affiliated_ap_info_t  affiliated_ap[EM_MAX_AP_MLD];
 } em_ap_mld_info_t;
@@ -3155,6 +3197,7 @@ typedef enum {
     em_bus_event_type_unassoc_sta_link_metrics_query,
     em_bus_event_type_unassoc_sta_result,
     em_bus_event_type_failed_conn,
+    em_bus_event_type_wei_app_data,
 
     em_bus_event_type_max
 } em_bus_event_type_t;
@@ -3169,6 +3212,7 @@ typedef struct {
     em_long_string_t	net_id;
     int sz;
     uint8_t is_emplus_agent;
+    em_profile_type_t peer_profile;
 } __attribute__((__packed__)) em_commit_info_t;
 
 typedef enum {
@@ -3249,8 +3293,10 @@ typedef enum {
     dm_orch_type_link_quality_report,
     dm_orch_type_unassoc_sta_link_req_query,
     dm_orch_type_unassoc_sta_result,
-    dm_orch_type_client_assoc
+    dm_orch_type_client_assoc,
 
+    dm_orch_type_wei_data,
+    
 } dm_orch_type_t;
 
 typedef struct {
@@ -3451,6 +3497,7 @@ typedef struct {
 		em_cmd_scan_params_t	scan_params;
         em_cmd_ap_metrics_rprt_params_t ap_metrics_params;
         em_cmd_unassoc_sta_query_params_t unassoc_sta_query_params;
+        void *raw_data;
         em_cmd_beacon_metrics_param_t beacon_metrics_params;
     } u;
 	em_network_node_t *net_node;
@@ -3481,6 +3528,7 @@ typedef struct {
 
 typedef enum {
     NB_REQTYPE_GET,
+    NB_REQTYPE_SET,
     NB_REQTYPE_METHOD,
 } nb_req_type_e;
 
@@ -3811,6 +3859,7 @@ static const SecurityTypeMap securityTypeMap[] = {
     { "WPA3 Transition", EM_AUTH_WPA3_TRANSITION }
 };
 
+static const unsigned char comcast_vendor_oui[EM_VENDOR_OUI_SIZE] = {0xd8, 0x9c, 0x8e};
 static const unsigned char airties_vendor_oui[EM_VENDOR_OUI_SIZE] = {0x88, 0x41, 0xfc};
 
 #ifndef SSL_KEY

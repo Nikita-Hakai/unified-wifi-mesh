@@ -183,6 +183,9 @@ typedef struct {
 #define DE_DEVICE_MACNUMMLDS    DE_NETWORK_DEVICE       "MaxNumMLDs"
 #define DE_DEVICE_BHALID        DE_NETWORK_DEVICE       "BackhaulALID"
 #define DE_DEVICE_TIDLMAP       DE_NETWORK_DEVICE       "TIDLinkMapping"
+#define DE_DEVICE_BOOTID        DE_NETWORK_DEVICE       "X_AIRTIES_BootID"
+#define DE_DEVICE_CLIENTID      DE_NETWORK_DEVICE       "X_AIRTIES_ClientID"
+#define DE_DEVICE_CLIENTSECRET  DE_NETWORK_DEVICE       "X_AIRTIES_ClientSecret"
 #define DE_DEVICE_ASSOCSTAREP   DE_NETWORK_DEVICE       "AssociatedSTAReportingInterval"
 #define DE_DEVICE_BHMEDIATYPE   DE_NETWORK_DEVICE       "BackhaulMediaType"
 #define DE_DEVICE_RADIONOE      DE_NETWORK_DEVICE       "RadioNumberOfEntries"
@@ -1036,6 +1039,7 @@ public:
     static bus_error_t apmld_get(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data);
     static bus_error_t apmld_tget(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data);
     static bus_error_t apmldcfg_get(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data);
+    static bus_error_t apmldcfg_set(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data);
 
     //AffiliatedAP
     static bus_error_t affap_get(char *event_name, raw_data_t *p_data, bus_user_data_t *user_data);

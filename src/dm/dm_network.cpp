@@ -136,12 +136,13 @@ void dm_network_t::encode(cJSON *obj, bool summary)
 
 	if (m_net_info.media == em_media_type_ieee8023ab) {
 		strncpy(str, "Ethernet", strlen("Ethernet") + 1);
-	} else if (m_net_info.media == em_media_type_ieee80211b_24) {
+	} else if ((m_net_info.media >= em_media_type_ieee80211b_24) && (m_net_info.media < em_media_type_max)) {
 		strncpy(str, "Wireless", strlen("Wireless") + 1);
 	} else {
 		strncpy(str, "Unknown", strlen("Unknown") + 1);
 
 	}
+    em_printfout("Network:%s media:0x%x encoded as MediaType:%s", m_net_info.id, static_cast<unsigned int>(m_net_info.media), str);
     cJSON_AddStringToObject(obj, "MediaType", str);
 }
 
@@ -188,6 +189,10 @@ void dm_network_t::operator = (const dm_network_t& obj)
     }
     memcpy(&this->m_net_info.colocated_agent_id.mac ,&obj.m_net_info.colocated_agent_id.mac,sizeof(mac_address_t));
     memcpy(&this->m_net_info.colocated_agent_id.name,&obj.m_net_info.colocated_agent_id.name,sizeof(em_interface_name_t));
+    this->m_net_info.media = obj.m_net_info.media;
+    this->m_net_info.ctrl_id.media = obj.m_net_info.ctrl_id.media;
+    this->m_net_info.colocated_agent_id.media = obj.m_net_info.colocated_agent_id.media;
+    em_printfout("Network:%s operator= copied media:0x%x", obj.m_net_info.id, static_cast<unsigned int>(obj.m_net_info.media));
 }
 
 int dm_network_t::init()

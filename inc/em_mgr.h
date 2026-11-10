@@ -27,6 +27,7 @@ class em_mgr_t {
    
     pthread_t   m_tid;
     bool m_exit;
+    bool m_passive;
     em_queue_t  m_queue;
 	unsigned int m_tick_demultiplex;
 	unsigned short m_msg_id;
@@ -282,6 +283,20 @@ public:
 	unsigned short get_next_msg_id();
 
 	/**!
+	 * @brief Returns whether the controller was started in passive mode.
+	 *
+	 * @returns true if passive mode is enabled, false otherwise.
+	 */
+	bool is_passive() const { return m_passive; }
+
+	/**!
+	 * @brief Sets the passive mode flag.
+	 *
+	 * @param[in] passive true to enable passive mode, false to disable.
+	 */
+	void set_passive(bool passive) { m_passive = passive; }
+
+	/**!
 	 * @brief Listens to manager nodes.
 	 *
 	 * This function is responsible for listening to the manager nodes and processing
@@ -332,6 +347,11 @@ public:
         printf("refresh_onewifi_subdoc not implemented\n");
         return -2;
     }
+
+	virtual bool refresh_current_radio_data(const unsigned char *) {
+		printf("refresh_current_radio_data not implemented\n");
+		return false;
+	}
 
     
 	/**
